@@ -1,0 +1,2156 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0E1013" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>PepPlot</title>
+
+  <!-- Versões fixas (evita quebra quando o CDN atualiza) -->
+  <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+  <script crossorigin src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    html, body, #root { height: 100%; margin: 0; background: #0E1013; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    #erro-carregamento {
+      display: none; color: #FF5C5C; font-family: system-ui, sans-serif;
+      padding: 24px; font-size: 14px; line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <div id="erro-carregamento"></div>
+
+  <script>
+    // Verifica se as bibliotecas do CDN carregaram e avisa na tela em vez de
+    // deixar a tela preta silenciosa.
+    window.addEventListener("DOMContentLoaded", function () {
+      var faltando = [];
+      if (typeof React === "undefined") faltando.push("React");
+      if (typeof ReactDOM === "undefined") faltando.push("ReactDOM");
+      if (typeof Recharts === "undefined") faltando.push("Recharts");
+      if (typeof Babel === "undefined") faltando.push("Babel");
+      if (faltando.length) {
+        var el = document.getElementById("erro-carregamento");
+        el.style.display = "block";
+        el.textContent = "Não foi possível carregar: " + faltando.join(", ") +
+          ". Verifique sua conexão com a internet (o app baixa essas bibliotecas na primeira vez) e recarregue a página.";
+      }
+    });
+  </script>
+
+<script type="text/babel" data-presets="react">
+    // ========================================================================
+    // PONTE COM AS BIBLIOTECAS DO CDN
+    // Sem "import", os hooks do React e os componentes do Recharts precisam ser
+    // extraídos dos objetos globais para poderem ser usados pelo nome.
+    // ========================================================================
+    const { useState, useMemo, useRef, useEffect } = React;
+    const {
+      LineChart, Line, XAxis, YAxis, CartesianGrid,
+      Tooltip, ResponsiveContainer, ReferenceLine, Brush,
+    } = Recharts;
+
+    // ========================================================================
+    // ÍCONES INLINE — substituem lucide-react (sem import, mesmo visual: linhas
+    // finas, sem preenchimento, cantos arredondados)
+    // ========================================================================
+    function IconeBase({ children, size = 24, color, strokeWidth = 2, style, ...props }) {
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" style={style} {...props}>
+          {children}
+        </svg>
+      );
+    }
+    const Plus = (p) => <IconeBase {...p}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></IconeBase>;
+    const X = (p) => <IconeBase {...p}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></IconeBase>;
+    const Check = (p) => <IconeBase {...p}><polyline points="20 6 9 17 4 12" /></IconeBase>;
+    const Syringe = (p) => (
+      <IconeBase {...p}>
+        <line x1="4" y1="20" x2="9" y2="15" />
+        <path d="M9 15l7-7" />
+        <path d="M12 6l6 6" />
+        <line x1="15" y1="3" x2="21" y2="9" />
+        <line x1="17" y1="5" x2="19" y2="7" />
+      </IconeBase>
+    );
+    const FlaskConical = (p) => (
+      <IconeBase {...p}>
+        <path d="M9 2v6l-6 11a1 1 0 0 0 .9 1.5h14.2a1 1 0 0 0 .9-1.5L13 8V2" />
+        <line x1="8" y1="2" x2="16" y2="2" />
+        <line x1="7" y1="16" x2="17" y2="16" />
+      </IconeBase>
+    );
+    const Pencil = (p) => (
+      <IconeBase {...p}>
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+      </IconeBase>
+    );
+    const Clock = (p) => (
+      <IconeBase {...p}>
+        <circle cx="12" cy="12" r="9" />
+        <polyline points="12 7 12 12 16 14" />
+      </IconeBase>
+    );
+    const CalendarClock = (p) => (
+      <IconeBase {...p}>
+        <path d="M8 2v4" />
+        <path d="M16 2v4" />
+        <rect x="3" y="4" width="18" height="17" rx="2" />
+        <path d="M3 10h18" />
+        <circle cx="16" cy="16" r="3" />
+        <path d="M16 14.5v1.5l1 1" />
+      </IconeBase>
+    );
+    const ArrowLeft = (p) => (
+      <IconeBase {...p}>
+        <line x1="19" y1="12" x2="5" y2="12" />
+        <polyline points="12 19 5 12 12 5" />
+      </IconeBase>
+    );
+    const RotateCcw = (p) => (
+      <IconeBase {...p}>
+        <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+        <polyline points="3 3 3 8 8 8" />
+      </IconeBase>
+    );
+    const ChevronDown = (p) => <IconeBase {...p}><polyline points="6 9 12 15 18 9" /></IconeBase>;
+    const ChevronUp = (p) => <IconeBase {...p}><polyline points="18 15 12 9 6 15" /></IconeBase>;
+    const Tag = (p) => (
+      <IconeBase {...p}>
+        <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" />
+        <circle cx="7.5" cy="7.5" r="1.5" />
+      </IconeBase>
+    );
+    const Wallet = (p) => (
+      <IconeBase {...p}>
+        <rect x="3" y="6" width="18" height="13" rx="2" />
+        <path d="M3 10h18" />
+        <circle cx="17" cy="14.5" r="1.2" />
+      </IconeBase>
+    );
+    const Beaker = (p) => (
+      <IconeBase {...p}>
+        <path d="M4.5 3h15" />
+        <path d="M6 3v7l-3.5 8.5A1 1 0 0 0 3.4 20h17.2a1 1 0 0 0 .9-1.5L18 10V3" />
+        <path d="M6.5 14h11" />
+      </IconeBase>
+    );
+    const Trash2 = (p) => (
+      <IconeBase {...p}>
+        <line x1="10" y1="11" x2="10" y2="17" />
+        <line x1="14" y1="11" x2="14" y2="17" />
+        <path d="M5 6h14" />
+        <path d="M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14" />
+        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+      </IconeBase>
+    );
+    const TrendingUp = (p) => (
+      <IconeBase {...p}>
+        <polyline points="3 17 9 11 13 15 21 6" />
+        <polyline points="14 6 21 6 21 13" />
+      </IconeBase>
+    );
+    const Scale = (p) => (
+      <IconeBase {...p}>
+        <line x1="12" y1="3" x2="12" y2="21" />
+        <line x1="4" y1="7" x2="20" y2="7" />
+        <path d="M4 7l-2 6a3 3 0 0 0 6 0z" />
+        <path d="M20 7l-2 6a3 3 0 0 0 6 0z" />
+      </IconeBase>
+    );
+    const CalendarDays = (p) => (
+      <IconeBase {...p}>
+        <rect x="3" y="4" width="18" height="17" rx="2" />
+        <line x1="3" y1="10" x2="21" y2="10" />
+        <line x1="8" y1="2" x2="8" y2="6" />
+        <line x1="16" y1="2" x2="16" y2="6" />
+        <circle cx="8" cy="14" r="1" />
+        <circle cx="12" cy="14" r="1" />
+        <circle cx="16" cy="14" r="1" />
+      </IconeBase>
+    );
+
+
+// ============================================================================
+// TOKENS DE DESIGN
+// ============================================================================
+const COR = {
+  bg: "#0E1013",
+  card: "#181B20",
+  borda: "#2A2E35",
+  textoPrincipal: "#F5F6F7",
+  textoSecundario: "#9096A1",
+  acentoReal: "#39D98A",
+  acentoRealClaro: "rgba(57,217,138,0.16)",
+  acentoPeptideo: "#38BDF8",
+  acentoPeptideoClaro: "rgba(56,189,248,0.16)",
+  prevista: "#5B6270",
+  atraso: "#FFB020",
+  atrasoClaro: "rgba(255,176,32,0.16)",
+  perdido: "#FF5C5C",
+  perdidoClaro: "rgba(255,92,92,0.16)",
+};
+
+// Paleta harmônica usada para colorir cada tipo hormonal e como opções de
+// personalização de cor de qualquer composto.
+const PALETA_SELECIONAVEL = [
+  { nome: "Verde-lima", cor: "#39D98A" },
+  { nome: "Azul-elétrico", cor: "#5B8CFF" },
+  { nome: "Coral", cor: "#FF8A5C" },
+  { nome: "Âmbar", cor: "#FFD166" },
+  { nome: "Violeta", cor: "#C792EA" },
+  { nome: "Ciano", cor: "#38BDF8" },
+  { nome: "Verde-menta", cor: "#4ADE80" },
+  { nome: "Rosa", cor: "#FF6FA5" },
+];
+const PALETA_TIPOS_HORMONIO = {
+  Testosterona: "#39D98A",
+  Nandrolona: "#5B8CFF",
+  Trembolona: "#FF8A5C",
+  "Drostanolona (Masteron)": "#FFD166",
+  Boldenona: "#C792EA",
+};
+const CORPADRAO_PEPTIDEO = "#38BDF8";
+
+// ============================================================================
+// UTILITÁRIOS
+// ============================================================================
+const MS_POR_DIA = 1000 * 60 * 60 * 24;
+const somarDias = (data, dias) => new Date(data.getTime() + dias * MS_POR_DIA);
+const diferencaEmDias = (inicio, fim) => Math.round(((fim.getTime() - inicio.getTime()) / MS_POR_DIA) * 1000) / 1000;
+const truncarParaDia = (data) => {
+  const d = new Date(data);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+const mesmoDia = (a, b) => truncarParaDia(a).getTime() === truncarParaDia(b).getTime();
+const pad = (n) => String(n).padStart(2, "0");
+const paraInputDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const deInputDate = (str) => new Date(`${str}T00:00:00`);
+const formatarDataCurta = (d) => d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");
+const formatarDiaSemana = (d) => d.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "");
+const arredondar2 = (n) => Math.round(n * 100) / 100;
+const arredondar1 = (n) => Math.round(n * 10) / 10;
+const formatarNumeroBR = (n) => (Number(n) || 0).toLocaleString("pt-BR", { maximumFractionDigits: 1, minimumFractionDigits: 0 });
+const converterParaMcg = (valor, unidade) => (unidade === "mg" ? Number(valor) * 1000 : Number(valor));
+const formatarBRL = (n) => (Number(n) || 0).toFixed(2).replace(".", ",");
+const parseValorMonetario = (str) => parseFloat(String(str).replace(",", ".")) || 0;
+
+/** Escolhe texto claro ou escuro automaticamente conforme a luminância do fundo — evita texto ilegível em cores dinâmicas (ex: âmbar claro). */
+function corTextoContraste(hex) {
+  const c = String(hex).replace("#", "");
+  if (c.length !== 6) return COR.textoPrincipal;
+  const r = parseInt(c.substring(0, 2), 16);
+  const g = parseInt(c.substring(2, 4), 16);
+  const b = parseInt(c.substring(4, 6), 16);
+  const luminancia = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminancia > 0.6 ? "#0E1013" : "#F5F6F7";
+}
+
+// HOJE agora é a data real do dispositivo (recalculada a cada carregamento do app).
+// DATA_INICIO_DEMO só é usada na primeira vez que o app abre (sem dados salvos),
+// para gerar um ciclo de exemplo já com histórico — ancorada relativamente a HOJE,
+// então a "10ª dose atrasada" sempre cai em "ontem", não importa o dia real de hoje.
+// Logo do PepPlot (ícone 96x96 embutido em base64 — evita depender de hospedagem externa)
+const LOGO_ICONE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAMAAADVRocKAAABPlBMVEUBAQH///8HEAwNFREBDQwCExENGRYAAAACBAQDCAcNJR4QLSQCKisDICAEJiUBMDEEGBUPHhgCGxsWRjPo6OcSMygMMi8dV0UDNzcTPCyTk5IHTExrtZMPZWUQRkM+n55OurgEPj/i4+Jip4c7ZVEHWlsSODMlYEgaTjwmgoCQ/vozMzMXJh84U0WCy6eI3LZywJ01jIimpqb29vUbMiiFhYWNjYxg2Ne2/t4cYVgQQDx+1awlZ2Wc//4ycllRknYoKCiX68VDrawymJhz5OCo8s/t7e0qSDlFc111dXR2yaJ7entVn4BLf2eC8e2H/PvS0tFbs5hlxaxRiG3CwsJbxsRBimw2fmgjPTBg6+lOxsQrZ04ZdXVR0s+T4b5j/v1YWFdnZ2aampmw//Ink5GT/NJ04MGysrHG/+eA+NrNTjvpAAAACXBIWXMAAAsTAAALEwEAmpwYAAAK+ElEQVR42u1ZZ3fawBIFITQrCYEEBonQTcdgIMam2dgG3HvvJXFJ8v//wJuVqA7GJC/58M7LHDjas8Dc3Tt1F5Ppn/yTPyHwf7iSv40E8Dc0Qv/xpzcG72n43Z30f6ePRqrpTMKftCdB4XmePsgfN5CumkWxWq30QXH+e4TuN1E7apadTkmS7CiS5JQRZiQGfDSFSt98B9fOWp2S3UbFYYjNZpecOsZvL76vHtdOtWu+QLrVDKM0W+mAT6MgiDEA0V/aO9sY8nBjLbp6u82hxYvh9kFmKXOwv3+QQdk/awUiCEIhOr8m1o997y1FqF+WbA5f+oyqDKUD8Ti+4rfpVridyZRbcc1hlykCldDVIhCYhKY+Pci9zRYptpf2w+l4RIsg+zV8BzUtEk83cToU12xOlrIE3NXD9S+6Ji7f7tBuy0vt57jPF9G0BLqPKDmlhMdT81V9gee7TLsVcVqJzm7xoQrknQWP3BXqR3bCqN4XqQWDHtGdEBSuRN9udyJYrS6mm/tPS9dBnSMCnjCBET75Bqs3g/Q7bY5Ae6npCzokWeZ4wnL4uYUAWBir5ElVjzNL7WZ6UbMaAIkwD2PCwTB8HwH1O7T0Qfs2otXsVpax4BSHFHCoTZEFt6v48nRcDARtTkoRBSidDQAMrR1GwBJcv9ZaKgfQEwVcIs8A8BbE54iJCII7dfT0eqHWtOBilSU81c+HzobS7nhn0vlvLV0HqjU7l1U4TshyFkXkOItbFMRUSj1+Oqq6PIvN8lk5bKfUq+WmMnmWI6hfe0b6IzXJyisMzzMcvhVMdYIkiSrq31UT1bNysWaVi+U0cTbLKkxegghvtWvppeuIQxJYAhyP9FCKOF62+yJ2r3r0dKQm0u2iE0zooonr67siC2Nz+FuCJFt8vx13SKwFFfQBrFLg4TroOn86VhOhdhAIzUToVuH0CPVdI8BQAqKz1MCR8n7AZ5OsCiZ+SpGF41lOlGzNg7tqdfW+6im2PcAbmYFAyEgSH9W3bpggQWjgdKRmF9CuFiaLtlWynOAJas2720C18HTurV4lgO8s0wB4W2zHlBdWcgQy4YhHIMg/jStCXZSXbZFmOR4MNirHaq2sq+ykXGMHMLDKsT7KW22Rs0xAkxRUgW4PFrQBozgxbZR9mqpurzXcoTB6AumuqEcRamZ4+MCLqAVul0IRm4SZwWShILyJMILUergL2jzqRcXvCpY9kLhrMiY9hnUA3oDaeD1iP7AEtcDZfgCTW8lisWTxXcJAExPa3cOzlnAlC5WGGAoBJs8HXDdtMKB6dS2CSR8eZX5cAhkfY05b/KAZsVutCv7Gguuz8Mia1rq79dlEb2OtgBsQAWrl67s08gFC8y54caUPlaPCcZSFsSWasHZHEy3g5FlMPcSwAcZF6ypuS0hubxQ3oBapHVkihq8Xi+lyEW0khBc3li/qe7iNTr2EkakVKEO+/TOfh8XVY1RYTDQ7O+23VwGbxyN41dW8y03Tpx4+sPjwgP6qkyP++PFa6gbVyKDQP0SG7IGllq8mcFyW0W3AuUVb/KoYSbh3G67zyrJXYDsk4yP8ENL9lQBz/GPZYB+Go3c4yDAIbKEDNDGWAAU7Ioxkq8cXumppHnsqf5OaXUu6Zb4XVcAFrdDx1cttZoJ0StPcWTvikbAEWPQChjOLB1c+j1NeLrgaFb9XYAZaIWav6/dQ8pPJAHz7Yc0jE8JwJhoHrFQ7vrvVPE57/dzlrzTcCt83ICh15n2AXrobmMeEHM+EtITAWjnRyjCCLNiPXoN2UZQb+WRybdYlYn3rbQGUAtNhtwMAE4TxAea5hCAmUgm3UHJ7d/M4cJeEQjS5WznXTYwZtJPmuAJveAwG8fZPefnnbEcBipmAzS441eNdu1PyChf5G7vMy4J6n0zmV1W3wgKzmaUaabHJrV7SJ9Vfj8FwJzQ6zCRHKBNw2EV78enlKOlxXazeiArLCoLfn1qu7HpFFnLb/u1NAjTGo4XY7DJDvfOkfglD/QOMrJ46wEHc4fE4jo8vjl6PjlYvJDdDeOfNfVLNo48y2ejsBvJduATI1fc2cpbdeg44v9/SS0EA73deBkAgqAZDrz61Vj2q5FNiKSuI4rZfPcc86t7Mn/DUArn6ya7/crOwAUj+bmEPTGSydkIHiNQufix60NDe3YYoZy2c3LhX1dnKjRjLlwxVwGxHS9E9Sg9hUD+Z7MhEAVqZW5/vtYiG5q2yKGPbIluF/LLrohJ1ybFoRxUPy5ulDd2Tcpt7MZi0pcCGMZ15joePsR/lsGphwTcpghzdTqn3a6qXQYBuGVvWl43WzG2e9ADGHdF0eyDAbeb5+UfV5uRoLuJ4xlqS91Zv1N3vy16RdADAAOCpZ3cBACY5A/KyI35w3S4GPZyC3HNZThG9y6sNtDAGMQe5aMcZuzvAQWyPAsBkJ1asXb7yUjho1ANCFCvDnqw2XMn7tRu3wsCQDTY2gUZDLnbyoQ0GTk2YTffjRrpmqZG9hfsbrzr7HZMEdgwb+ctO9c3Wty/3oiXKTQkjYVIANIKUTjsS6D3Y1bFyanfVn3Sphe+7LlGvA7H6CaY3IJv1GL42ojHgT+qxXzgX83ju89RSKZcrlWycFO5nz1M3jdnvUa+b6xz2otu5WM7vzwJk/f6N7MZ2dHzfDm8aa3qqj+ZR7u/z28s3XlfqfA3X39FPE9zG6svLJiXKBLHZ6GwOJl0/0FsDBs/1giupi8vrTbmS/sraeU+/7jbRlzqNYOqipbzS9dAPjgZG28vIiiC63W6v102Vu9QL/1qlkPSKff2UpVip25t06sGEd0h4sBGRElVVkzfJ5E3j3H///Xv+wuUWLCwZHZxDAB+nOsa6vLaqyxpKpVK59zdSXrdifXOrQroQcJnP/hKAvDnbE3/0/Aa1i4K1exvxM8389osfwARjThtvKMIM7eoI2kEUBaV3YzMqzTD1l8K7dX6ESbAfRSPrIqBgnsbT09j7ucuTLPzKdRSGAdMTlv9A+/tXkmPAyIAMXjK81+qMvLabICz+2p20LsTwRDC6p+4k6Q1NZJCCzjcHPof3LdDR+OY+tsdrf2jqH7yNs3WXSULgXXZgfhplaupwC+9Odg6npqam109h5RCncPhtZmg4/aV7NH48xdl1Ovm4Pj11eDg9Pff1neuiz+ZPCwsL86fmR9gyny58QtmCGfPpPE5/NR/CSnd4irM7nYI5Y56mv/o6N01mvn5aOEQdXx/hJ7MaAHM0saCeBfi2Tg91NEhnzFtYcAl8NTMrb4Y6wJZ5Rp/coc+ODoCRcdwHmIfT9S9bW1tfth57AJ8GAfgVfQf0nmLenMVLCx6+mHPA86iDMfGjOwAEMC/Mz8/vUIpOzcjr+tTcZ0rRDs5+MijqDrsU8bBgzurtFwUg3UWObCkogG7Ewx0eTqeJEXOoag7tOk2NaAynjCHdjLGDFVqjxwMMUESMC5rPyKhJV0BV8YY5KC+8UWgU8ze9uaDUfKHnWPzFyk8AbyKiayDqyzNz5nXczHqHDD2QdABiBBrqm0MK16cVy6H+zTnzZ73N6wIMWLl/MfU437MOrOxQL/20Y1I+dZse4HpDrASPuhsvWID7og8e9Sgd1DGc+8DU8a7erWQ/Vbw5ecFgWunnkkFWRqQLCjB079bLqP36OJQH+hl3KPeS0Rfwv5FL/0z6hb/8xyFM+E/bb5aGMeuHjwvxiH4MfiqQ75xLR9ysw9/5D/WXjAX/a/+e/5N/8ufkP4c/efHZjaxIAAAAAElFTkSuQmCC";
+
+
+const HOJE = truncarParaDia(new Date());
+const DATA_INICIO_DEMO = somarDias(HOJE, -64);
+
+// ============================================================================
+// BASE DE DADOS — extraída do guia de hormônios/peptídeos fornecido
+// (meias-vidas convertidas para dias; valores médios quando a fonte dava uma faixa)
+// ============================================================================
+const CATALOGO_HORMONIOS = [
+  { tipo: "Testosterona", ester: "Propionato", meiaVidaDias: 1.04, meiaVidaAbsorcao: 0.56, fracao: 0.83, fatorCalibracao: 29.1507 },
+  { tipo: "Testosterona", ester: "Fenilpropionato", meiaVidaDias: 2.5, meiaVidaAbsorcao: 0.264, fracao: 0.77, fatorCalibracao: 6.5224 },
+  { tipo: "Testosterona", ester: "Enantato", meiaVidaDias: 7.19, meiaVidaAbsorcao: 0.295, fracao: 0.72, fatorCalibracao: 2.7157 },
+  { tipo: "Testosterona", ester: "Cipionato", meiaVidaDias: 6.9, meiaVidaAbsorcao: 1.664, fracao: 0.7, fatorCalibracao: 3.4322 },
+  { tipo: "Testosterona", ester: "Decanoato", meiaVidaDias: 5.6, meiaVidaAbsorcao: 0.567, fracao: 0.62, fatorCalibracao: 7.6001 },
+  { tipo: "Testosterona", ester: "Undecanoato", meiaVidaDias: 33.9, meiaVidaAbsorcao: 2.446, fracao: 0.61, fatorCalibracao: 1.0941 },
+  { tipo: "Nandrolona", ester: "Fenilpropionato (NPP)", meiaVidaDias: 2.4, meiaVidaAbsorcao: 0.288, fracao: 0.67, fatorCalibracao: 8.1422 },
+  { tipo: "Nandrolona", ester: "Decanoato", meiaVidaDias: 10.2, meiaVidaAbsorcao: 0.369, fracao: 0.64, fatorCalibracao: 3.2362 },
+  { tipo: "Trembolona", ester: "Acetato", meiaVidaDias: 1.5, meiaVidaAbsorcao: 0.162, fracao: 0.87, fatorCalibracao: 7.28 },
+  { tipo: "Trembolona", ester: "Enantato", meiaVidaDias: 11, meiaVidaAbsorcao: 1.126, fracao: 0.7, fatorCalibracao: 7.3845 },
+  { tipo: "Trembolona", ester: "Hexahidrobenzilcarbonato (Parabolan)", meiaVidaDias: 8, meiaVidaAbsorcao: 0.819, fracao: 0.7, fatorCalibracao: 6.8646 },
+  { tipo: "Drostanolona (Masteron)", ester: "Propionato", meiaVidaDias: 2, meiaVidaAbsorcao: 0.205, fracao: 0.8, fatorCalibracao: 7.6463 },
+  { tipo: "Drostanolona (Masteron)", ester: "Enantato", meiaVidaDias: 4.5, meiaVidaAbsorcao: 0.469, fracao: 0.7, fatorCalibracao: 7.5923 },
+  { tipo: "Boldenona", ester: "Undecilenato (Equipoise)", meiaVidaDias: 5.13, meiaVidaAbsorcao: 3.418, fracao: 0.61, fatorCalibracao: 1.8556 },
+];
+const TIPOS_HORMONIO = [...new Set(CATALOGO_HORMONIOS.map((h) => h.tipo))];
+const FATOR_ESCALA_NGDL = 2.182;
+
+const CATALOGO_PEPTIDEOS = [
+  { nome: "BPC-157", meiaVidaDias: 0.2 },
+  { nome: "TB-500", meiaVidaDias: 1.75 },
+  { nome: "Ipamorelin", meiaVidaDias: 0.083 },
+  { nome: "CJC-1295 sem DAC (Mod GRF 1-29)", meiaVidaDias: 0.02 },
+  { nome: "CJC-1295 com DAC", meiaVidaDias: 7 },
+  { nome: "Tesamorelina", meiaVidaDias: 0.022 },
+  { nome: "GHK-Cu", meiaVidaDias: 0.01 },
+  { nome: "Tirzepatida", meiaVidaDias: 5 },
+  { nome: "Retatrutide", meiaVidaDias: 6 },
+  { nome: "Semaglutida", meiaVidaDias: 7 },
+];
+
+const OPCOES_FREQUENCIA = [
+  { key: "diaria", label: "Diária", paraItem: { tipo: "intervalo", valor: 1 } },
+  { key: "dia_sim_dia_nao", label: "Dia sim, dia não", paraItem: { tipo: "intervalo", valor: 2 } },
+  { key: "a_cada_3_dias", label: "A cada 3 dias", paraItem: { tipo: "intervalo", valor: 3 } },
+  { key: "a_cada_4_dias", label: "A cada 4 dias", paraItem: { tipo: "intervalo", valor: 4 } },
+  { key: "a_cada_5_dias", label: "A cada 5 dias", paraItem: { tipo: "intervalo", valor: 5 } },
+  { key: "semanal", label: "Semanal (a cada 7 dias)", paraItem: { tipo: "intervalo", valor: 7 } },
+  { key: "duas_vezes_semana", label: "2x por semana (terça e quinta)", paraItem: { tipo: "diasSemana", valor: [2, 4] } },
+  { key: "quinzenal", label: "Quinzenal (a cada 14 dias)", paraItem: { tipo: "intervalo", valor: 14 } },
+  { key: "a_cada_21_dias", label: "A cada 21 dias", paraItem: { tipo: "intervalo", valor: 21 } },
+  { key: "mensal", label: "Mensal (a cada 30 dias)", paraItem: { tipo: "intervalo", valor: 30 } },
+  { key: "a_cada_60_dias", label: "A cada 60 dias", paraItem: { tipo: "intervalo", valor: 60 } },
+  { key: "a_cada_90_dias", label: "A cada 90 dias", paraItem: { tipo: "intervalo", valor: 90 } },
+  { key: "personalizado", label: "Personalizado (definir dias)", paraItem: null },
+];
+/** Determina qual opção do seletor corresponde a uma frequência já salva (para preencher o formulário de edição). */
+function encontrarChaveFrequencia(frequencia) {
+  const encontrada = OPCOES_FREQUENCIA.find((o) => o.paraItem && JSON.stringify(o.paraItem) === JSON.stringify(frequencia));
+  return encontrada ? encontrada.key : "personalizado";
+}
+/** Intervalo em dias a pré-preencher no campo personalizado ao editar um item existente. */
+function obterIntervaloParaEdicao(frequencia) {
+  return frequencia.tipo === "intervalo" && frequencia.valor ? frequencia.valor : 7;
+}
+
+// ============================================================================
+// GERAÇÃO DE AGENDA / ITEM
+// ============================================================================
+function gerarAgendamentoItem(item) {
+  const duracaoDias = item.duracaoSemanas * 7;
+  const dataInicio = truncarParaDia(item.dataInicio);
+  const agendamentos = [];
+
+  const incluirDia = (offset) => {
+    if (item.frequencia.tipo === "intervalo") return offset % item.frequencia.valor === 0;
+    return item.frequencia.valor.includes(somarDias(dataInicio, offset).getDay());
+  };
+
+  for (let offset = 0; offset <= duracaoDias; offset++) {
+    if (!incluirDia(offset)) continue;
+    const dataProgramada = somarDias(dataInicio, offset);
+    agendamentos.push({
+      id: `${item.id}-${dataProgramada.getTime()}`,
+      itemId: item.id,
+      dataProgramada,
+      dose: item.dose,
+      unidade: item.unidade,
+      doseExibicao: item.doseExibicao ?? item.dose,
+      unidadeExibicao: item.unidadeExibicao ?? item.unidade,
+      meiaVidaDias: item.meiaVidaDias,
+      fracao: item.fracao ?? 1,
+      meiaVidaAbsorcao: item.meiaVidaAbsorcao ?? null,
+      fatorCalibracao: item.fatorCalibracao ?? 1,
+      compostoNome: item.compostoNome,
+      realizada: false,
+      dataReal: null,
+    });
+  }
+  return agendamentos;
+}
+
+function criarItem(config) {
+  const item = { ...config };
+  return { ...item, agendamentos: gerarAgendamentoItem(item) };
+}
+
+function atualizarCamposItem(itens, itemId, campos) {
+  return itens.map((it) => (it.id === itemId ? { ...it, ...campos } : it));
+}
+
+function excluirItem(itens, itemId) {
+  return itens.filter((it) => it.id !== itemId);
+}
+
+/**
+ * Atualiza dose e/ou frequência de um item PRESERVANDO o histórico: doses já
+ * confirmadas (ou já vencidas) permanecem exatamente como aconteceram; apenas
+ * as doses futuras ainda não confirmadas são descartadas e regeneradas com o
+ * novo protocolo, a partir de hoje até a data original de término do ciclo.
+ */
+function atualizarProtocoloItem(itens, itemId, novosCampos) {
+  return itens.map((item) => {
+    if (item.id !== itemId) return item;
+    const itemMesclado = { ...item, ...novosCampos };
+    const agendamentosPreservados = item.agendamentos.filter((a) => a.realizada || a.dataProgramada < HOJE);
+
+    const dataFimOriginal = somarDias(truncarParaDia(item.dataInicio), item.duracaoSemanas * 7);
+    const semanasRestantes = Math.max(diferencaEmDias(HOJE, dataFimOriginal) / 7, 0);
+
+    const itemTemporario = { ...itemMesclado, dataInicio: HOJE, duracaoSemanas: semanasRestantes };
+    const novosAgendamentos = gerarAgendamentoItem(itemTemporario).filter((a) => a.dataProgramada >= HOJE);
+
+    return {
+      ...itemMesclado,
+      agendamentos: [...agendamentosPreservados, ...novosAgendamentos].sort((a, b) => a.dataProgramada - b.dataProgramada),
+    };
+  });
+}
+
+/** Percentual de doses já vencidas que foram de fato confirmadas — inclui todos os itens do ciclo. */
+function calcularAderenciaCiclo(itens, hoje) {
+  const todas = itens.flatMap((it) => it.agendamentos).filter((a) => a.dataProgramada <= hoje);
+  if (todas.length === 0) return null;
+  const feitas = todas.filter((a) => a.realizada).length;
+  return Math.round((feitas / todas.length) * 100);
+}
+
+// ============================================================================
+// MOTOR MATEMÁTICO — peptídeos (linha única) e hormônios (multi-grupo)
+// ============================================================================
+function gerarDadosGrafico(itens, hoje) {
+  const todosAgendamentos = itens.flatMap((it) => it.agendamentos);
+  if (todosAgendamentos.length === 0) return [];
+
+  const inicioGlobal = truncarParaDia(
+    todosAgendamentos.reduce((menor, a) => (a.dataProgramada < menor ? a.dataProgramada : menor), todosAgendamentos[0].dataProgramada)
+  );
+  const fimGlobal = todosAgendamentos.reduce((maior, a) => (a.dataProgramada > maior ? a.dataProgramada : maior), todosAgendamentos[0].dataProgramada);
+  const duracaoDias = Math.ceil(diferencaEmDias(inicioGlobal, fimGlobal)) + 14;
+
+  const pontos = [];
+  for (let offset = 0; offset <= duracaoDias; offset++) {
+    const diaAtual = somarDias(inicioGlobal, offset);
+    let prevista = 0;
+    for (const a of todosAgendamentos) {
+      const t = diferencaEmDias(a.dataProgramada, diaAtual);
+      if (t < 0) continue;
+      prevista += a.dose * Math.pow(0.5, t / a.meiaVidaDias);
+    }
+    let real = 0;
+    for (const a of todosAgendamentos) {
+      if (!a.realizada || !a.dataReal) continue;
+      const t = diferencaEmDias(a.dataReal, diaAtual);
+      if (t < 0) continue;
+      real += a.dose * Math.pow(0.5, t / a.meiaVidaDias);
+    }
+    pontos.push({ dia: diaAtual, offset, prevista: arredondar1(prevista), real: diaAtual <= hoje ? arredondar1(real) : null, label: formatarDataCurta(diaAtual) });
+  }
+  return pontos;
+}
+
+function computeDadosVisiveis(pontosGrafico, periodo, hoje) {
+  if (pontosGrafico.length === 0) return { dados: [], indiceHoje: -1 };
+  const indiceHoje = pontosGrafico.findIndex((p) => mesmoDia(p.dia, hoje));
+  if (periodo === null) return { dados: pontosGrafico, indiceHoje };
+  const janelaDias = periodo * 7;
+  const inicio = Math.max(0, indiceHoje - janelaDias);
+  // Antes o lado futuro ficava travado em +7 dias fixos, não importa o período
+  // escolhido — por isso "12 semanas" ou "Tudo" pareciam mostrar só algumas
+  // semanas. Agora o futuro também escala com o período selecionado.
+  const fim = Math.min(pontosGrafico.length - 1, indiceHoje + janelaDias);
+  const dados = pontosGrafico.slice(inicio, fim + 1).map((p, i, arr) => ({ ...p, isUltimoReal: p.real != null && (arr[i + 1]?.real == null || i === arr.length - 1) }));
+  return { dados, indiceHoje };
+}
+
+/** Agrupa itens de hormônio conforme o modo: 'sobrepor' (por tipo) ou 'comparar' (cada item separado). */
+function agruparItensHormonio(itens, modo) {
+  if (modo === "comparar") {
+    const contagemPorTipo = {};
+    return itens.map((it) => {
+      const tipo = it.tipoHormonio || it.compostoNome;
+      const corPadraoTipo = PALETA_TIPOS_HORMONIO[tipo];
+      const indice = contagemPorTipo[tipo] ?? 0;
+      contagemPorTipo[tipo] = indice + 1;
+      const corFinal = it.cor && it.cor !== corPadraoTipo ? it.cor : PALETA_SELECIONAVEL[indice % PALETA_SELECIONAVEL.length].cor;
+      return { chave: it.id, nome: it.compostoNome, cor: corFinal, itens: [it] };
+    });
+  }
+  const grupos = {};
+  itens.forEach((it) => {
+    const chave = it.tipoHormonio || it.compostoNome;
+    if (!grupos[chave]) grupos[chave] = { chave, nome: chave, cor: PALETA_TIPOS_HORMONIO[chave] || it.cor || COR.acentoReal, itens: [] };
+    grupos[chave].itens.push(it);
+  });
+  return Object.values(grupos);
+}
+
+/**
+ * Concentração no modelo de Bateman (absorção de 1ª ordem + eliminação de 1ª ordem).
+ * Sobe gradualmente até um pico (quando ka e ke se cruzam) e só então decai —
+ * diferente do decaimento exponencial simples que assumia pico instantâneo no dia 0.
+ */
+function calcularBateman(doseMg, ka, ke, t) {
+  if (t < 0) return 0;
+  if (Math.abs(ka - ke) < 1e-6) return 0; // evita divisão por zero (não ocorre com os pares ka/ke do catálogo)
+  const acumulacao = Math.exp(-ke * t) - Math.exp(-ka * t);
+  return ((doseMg * ka) / (ka - ke)) * acumulacao;
+}
+
+/**
+ * Soma a curva de Bateman de todas as doses de cada grupo, ponderada por:
+ *  - `fracao`: fração de massa do éster que é hormônio ativo (razão de peso
+ *    molecular testosterona/éster — ex: Enantato ≈ 0,72).
+ *  - `fatorPeso`: ajuste relativo simples pelo peso corporal, usando 70kg como
+ *    referência.
+ * O resultado é convertido para uma estimativa de ng/dL usando um fator empírico
+ * calibrado para o Undecanoato de Testosterona (1000mg → pico ~1150 ng/dL entre
+ * os dias 7 e 14) e uma linha de base fisiológica (~300 ng/dL) antes de qualquer
+ * aplicação. Isso ainda é uma ESTIMATIVA para visualização, não um resultado de
+ * exame de sangue — não substitui dosagem laboratorial real.
+ */
+function gerarDadosGraficoMultiGrupo(grupos, hoje, pesoCorporal = 70) {
+  const todosAgendamentos = grupos.flatMap((g) => g.itens.flatMap((it) => it.agendamentos));
+  if (todosAgendamentos.length === 0) return [];
+  const inicioGlobal = truncarParaDia(todosAgendamentos.reduce((menor, a) => (a.dataProgramada < menor ? a.dataProgramada : menor), todosAgendamentos[0].dataProgramada));
+  const fimGlobal = todosAgendamentos.reduce((maior, a) => (a.dataProgramada > maior ? a.dataProgramada : maior), todosAgendamentos[0].dataProgramada);
+  const duracaoDias = Math.ceil(diferencaEmDias(inicioGlobal, fimGlobal)) + 21;
+  const fatorPeso = 70 / Math.max(Number(pesoCorporal) || 70, 30);
+
+  const pontos = [];
+  for (let offset = 0; offset <= duracaoDias; offset++) {
+    const diaAtual = somarDias(inicioGlobal, offset);
+    const ponto = { dia: diaAtual, offset, label: formatarDataCurta(diaAtual) };
+    grupos.forEach((g) => {
+      const agsGrupo = g.itens.flatMap((it) => it.agendamentos);
+
+      let massaPrevista = 0;
+      agsGrupo.forEach((a) => {
+        const t = diferencaEmDias(a.dataProgramada, diaAtual);
+        const ke = Math.log(2) / a.meiaVidaDias;
+        const ka = Math.log(2) / (a.meiaVidaAbsorcao || a.meiaVidaDias / 4.2);
+        massaPrevista += calcularBateman(a.dose, ka, ke, t) * (a.fracao ?? 1) * (a.fatorCalibracao ?? 1);
+      });
+
+      let massaReal = 0;
+      agsGrupo.forEach((a) => {
+        if (!a.realizada || !a.dataReal) return;
+        const t = diferencaEmDias(a.dataReal, diaAtual);
+        const ke = Math.log(2) / a.meiaVidaDias;
+        const ka = Math.log(2) / (a.meiaVidaAbsorcao || a.meiaVidaDias / 4.2);
+        massaReal += calcularBateman(a.dose, ka, ke, t) * (a.fracao ?? 1) * (a.fatorCalibracao ?? 1);
+      });
+
+      ponto[`${g.chave}_prevista`] = arredondar1(massaPrevista * fatorPeso * FATOR_ESCALA_NGDL);
+      ponto[`${g.chave}_real`] = diaAtual <= hoje ? arredondar1(massaReal * fatorPeso * FATOR_ESCALA_NGDL) : null;
+    });
+    pontos.push(ponto);
+  }
+  return pontos;
+}
+
+// ============================================================================
+// CÁLCULOS DE CUSTO E RECONSTITUIÇÃO
+// ============================================================================
+function obterCapacidadeFrasco(item) {
+  if (item.categoria === "hormonio") return (item.volumeFrascoMl || 0) * (item.concentracaoMgMl || 0);
+  return (item.vialMg || 0) * 1000;
+}
+
+function calcularCustoItem(item) {
+  const capacidade = obterCapacidadeFrasco(item);
+  if (!capacidade || !item.custoPorFrasco) return null;
+  const custoPorUnidade = item.custoPorFrasco / capacidade;
+  const custoPorDose = item.dose * custoPorUnidade;
+  const totalUnidadeCiclo = item.dose * item.agendamentos.length;
+  const frascosNecessarios = Math.max(1, Math.ceil(totalUnidadeCiclo / capacidade));
+  return { custoPorDose: arredondar2(custoPorDose), frascosNecessarios, custoTotalCiclo: arredondar2(frascosNecessarios * item.custoPorFrasco) };
+}
+
+/**
+ * Estoque restante e previsão de esgotamento (run-out), a partir de quantos
+ * frascos/ampolas o usuário tem comprados e de quantas doses já foram de fato
+ * aplicadas (apenas `realizada`, não o plano inteiro).
+ */
+function calcularEstoqueItem(item) {
+  const capacidade = obterCapacidadeFrasco(item);
+  if (!capacidade || !item.frascosComprados) return null;
+
+  const estoqueTotalUnidade = item.frascosComprados * capacidade;
+  const dosesRealizadas = item.agendamentos.filter((a) => a.realizada).length;
+  const unidadeConsumida = dosesRealizadas * item.dose;
+  const unidadeRestante = Math.max(estoqueTotalUnidade - unidadeConsumida, 0);
+  const dosesRestantesEstoque = item.dose > 0 ? Math.floor(unidadeRestante / item.dose) : 0;
+
+  // Estima o intervalo médio entre aplicações a partir do próprio agendamento,
+  // para projetar a data de esgotamento (em vez de assumir um valor fixo).
+  const agsOrdenados = [...item.agendamentos].sort((a, b) => a.dataProgramada - b.dataProgramada);
+  let intervaloMedioDias = 1;
+  if (agsOrdenados.length >= 2) {
+    const totalDias = diferencaEmDias(agsOrdenados[0].dataProgramada, agsOrdenados[agsOrdenados.length - 1].dataProgramada);
+    intervaloMedioDias = totalDias / (agsOrdenados.length - 1) || 1;
+  }
+  const dataEsgotamento = somarDias(HOJE, dosesRestantesEstoque * intervaloMedioDias);
+
+  return {
+    unidadeRestante: arredondar1(unidadeRestante),
+    dosesRestantesEstoque,
+    dataEsgotamento,
+    baixoEstoque: dosesRestantesEstoque <= 2,
+  };
+}
+
+/**
+ * Reconstituição de peptídeos. Seringas de insulina usam a escala 1mL=100 UI,
+ * logo 1 UI = 1/100 mL. concentração(mcg/mL) = pó total(mcg)/diluente(mL);
+ * mcg por UI = concentração/100; UI a puxar = dose alvo(mcg)/mcg por UI.
+ */
+function calcularDoseSeringa(vialMg, volumeDiluenteMl, doseMcgAlvo, tamanhoSeringaUi) {
+  const totalMcg = (Number(vialMg) || 0) * 1000;
+  const volume = Number(volumeDiluenteMl) || 0;
+  if (totalMcg <= 0 || volume <= 0) return null;
+  const concentracaoMcgMl = totalMcg / volume;
+  const mcgPorUi = concentracaoMcgMl / 100;
+  const unidadesParaPuxar = mcgPorUi > 0 ? arredondar1((Number(doseMcgAlvo) || 0) / mcgPorUi) : 0;
+  const excede = unidadesParaPuxar > tamanhoSeringaUi;
+  return {
+    concentracaoMcgMl: arredondar2(concentracaoMcgMl),
+    mcgPorUi: arredondar2(mcgPorUi),
+    unidadesParaPuxar,
+    excede,
+    mensagem: excede
+      ? `Essa dose exigiria ${unidadesParaPuxar} UI, acima da capacidade da seringa de ${tamanhoSeringaUi} UI. Use menos diluente ou uma seringa maior.`
+      : `Puxe até a marca de ${unidadesParaPuxar} UI na seringa de ${tamanhoSeringaUi} UI.`,
+  };
+}
+
+// ============================================================================
+// AÇÕES DE ESTADO
+// ============================================================================
+function darCheckNoHorario(itens, itemId, agendamentoId) {
+  return itens.map((item) => (item.id !== itemId ? item : { ...item, agendamentos: item.agendamentos.map((a) => (a.id === agendamentoId ? { ...a, realizada: true, dataReal: a.dataProgramada } : a)) }));
+}
+function desfazerCheckin(itens, itemId, agendamentoId) {
+  return itens.map((item) => (item.id !== itemId ? item : { ...item, agendamentos: item.agendamentos.map((a) => (a.id === agendamentoId ? { ...a, realizada: false, dataReal: null } : a)) }));
+}
+function confirmarDoseAtrasada(itens, itemId, agendamentoId, dataRealEscolhida) {
+  return itens.map((item) => {
+    if (item.id !== itemId) return item;
+    const agendamentoAlvo = item.agendamentos.find((a) => a.id === agendamentoId);
+    if (!agendamentoAlvo) return item;
+    const desvioDias = diferencaEmDias(agendamentoAlvo.dataProgramada, dataRealEscolhida);
+    const novosAgendamentos = item.agendamentos.map((a) => {
+      if (a.id === agendamentoId) return { ...a, realizada: true, dataReal: dataRealEscolhida };
+      const eFutura = a.dataProgramada > agendamentoAlvo.dataProgramada;
+      if (eFutura && !a.realizada && desvioDias !== 0) return { ...a, dataProgramada: somarDias(a.dataProgramada, desvioDias) };
+      return a;
+    });
+    return { ...item, agendamentos: novosAgendamentos };
+  });
+}
+
+// ============================================================================
+// ESTADO INICIAL SIMULADO
+// ============================================================================
+// ============================================================================
+// PERSISTÊNCIA — serialização de datas para o storage dos artifacts
+// (JSON não guarda objetos Date nativamente, então convertemos para ISO string
+// ao salvar e reconstruímos os objetos Date ao carregar)
+// ============================================================================
+const CHAVE_STORAGE = "aerolog-estado-v1";
+
+function serializarCiclos(ciclos) {
+  return ciclos.map((c) => ({
+    ...c,
+    itens: c.itens.map((it) => ({
+      ...it,
+      dataInicio: it.dataInicio.toISOString(),
+      agendamentos: it.agendamentos.map((a) => ({
+        ...a,
+        dataProgramada: a.dataProgramada.toISOString(),
+        dataReal: a.dataReal ? a.dataReal.toISOString() : null,
+      })),
+    })),
+  }));
+}
+
+function desserializarCiclos(bruto) {
+  return bruto.map((c) => ({
+    ...c,
+    itens: c.itens.map((it) => ({
+      ...it,
+      dataInicio: new Date(it.dataInicio),
+      agendamentos: it.agendamentos.map((a) => ({
+        ...a,
+        dataProgramada: new Date(a.dataProgramada),
+        dataReal: a.dataReal ? new Date(a.dataReal) : null,
+      })),
+    })),
+  }));
+}
+
+function gerarCicloInicial() {
+  const testosterona = criarItem({
+    id: "item-test-enantato",
+    categoria: "hormonio",
+    tipoHormonio: "Testosterona",
+    compostoNome: "Testosterona Enantato",
+    meiaVidaDias: 7.19,
+    meiaVidaAbsorcao: 0.295,
+    fatorCalibracao: 2.7157,
+    fracao: 0.72,
+    dose: 250,
+    unidade: "mg",
+    frequencia: { tipo: "intervalo", valor: 7 },
+    dataInicio: DATA_INICIO_DEMO,
+    duracaoSemanas: 20,
+    marca: "Hilma Biocare",
+    volumeFrascoMl: 10,
+    concentracaoMgMl: 250,
+    custoPorFrasco: 180,
+    cor: PALETA_TIPOS_HORMONIO["Testosterona"],
+    frascosComprados: 2,
+  });
+
+  const bpc = criarItem({
+    id: "item-bpc-157",
+    categoria: "peptideo",
+    compostoNome: "BPC-157",
+    meiaVidaDias: 0.2,
+    dose: 250,
+    unidade: "mcg",
+    doseExibicao: 250,
+    unidadeExibicao: "mcg",
+    frequencia: { tipo: "intervalo", valor: 1 },
+    dataInicio: somarDias(HOJE, -6),
+    duracaoSemanas: 8,
+    marca: "PeptideLab",
+    vialMg: 5,
+    volumeDiluenteMl: 2,
+    tamanhoSeringaUi: 50,
+    custoPorFrasco: 150,
+    cor: CORPADRAO_PEPTIDEO,
+    frascosComprados: 1,
+  });
+
+  let itens = [testosterona, bpc];
+  testosterona.agendamentos.slice(0, 9).forEach((a) => { itens = darCheckNoHorario(itens, testosterona.id, a.id); });
+  bpc.agendamentos.filter((a) => a.dataProgramada < HOJE).forEach((a) => { itens = darCheckNoHorario(itens, bpc.id, a.id); });
+
+  return { id: "ciclo-1", nome: "Ciclo Bulking", itens, arquivado: false };
+}
+
+// ============================================================================
+// COMPONENTES DE FORMULÁRIO REUTILIZÁVEIS
+// ============================================================================
+function Rotulo({ children }) {
+  return <p className="text-xs font-medium mb-1.5" style={{ color: COR.textoSecundario }}>{children}</p>;
+}
+
+function CampoTexto({ label, valor, onChange, placeholder }) {
+  return (
+    <div>
+      <Rotulo>{label}</Rotulo>
+      <input type="text" placeholder={placeholder} value={valor} onChange={(e) => onChange(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl text-sm" style={{ border: `1px solid ${COR.borda}`, color: COR.textoPrincipal, backgroundColor: COR.card, colorScheme: "dark" }} />
+    </div>
+  );
+}
+
+function CampoNumero({ label, valor, onChange, min = 0 }) {
+  return (
+    <div>
+      <Rotulo>{label}</Rotulo>
+      <input type="number" min={min} value={valor} onChange={(e) => onChange(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl text-sm" style={{ border: `1px solid ${COR.borda}`, color: COR.textoPrincipal, backgroundColor: COR.card, colorScheme: "dark" }} />
+    </div>
+  );
+}
+
+function CampoMoeda({ label, valor, onChange }) {
+  const [texto, setTexto] = useState(formatarBRL(valor));
+  useEffect(() => setTexto(formatarBRL(valor)), [valor]);
+  return (
+    <div>
+      <Rotulo>{label}</Rotulo>
+      <div className="flex items-center rounded-xl px-3.5" style={{ border: `1px solid ${COR.borda}`, backgroundColor: COR.card }}>
+        <span className="text-sm mr-1.5" style={{ color: COR.textoSecundario }}>R$</span>
+        <input
+          type="text"
+          inputMode="decimal"
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          onBlur={() => { const n = parseValorMonetario(texto); onChange(n); setTexto(formatarBRL(n)); }}
+          className="flex-1 py-2.5 text-sm outline-none bg-transparent"
+          style={{ color: COR.textoPrincipal }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function CampoSelect({ label, valor, opcoes, onChange }) {
+  return (
+    <div>
+      <Rotulo>{label}</Rotulo>
+      <select value={valor} onChange={(e) => onChange(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl text-sm" style={{ border: `1px solid ${COR.borda}`, color: COR.textoPrincipal, backgroundColor: COR.card, colorScheme: "dark" }}>
+        {opcoes.map((o) => (
+          <option key={o.valor} value={o.valor}>{o.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/** Seletor de duas opções com palavras por extenso (ex: Miligrama / Micrograma). */
+function SeletorDuasOpcoes({ label, opcoes, valorSelecionado, onSelecionar }) {
+  return (
+    <div>
+      <Rotulo>{label}</Rotulo>
+      <div className="flex gap-2">
+        {opcoes.map((op) => (
+          <button key={op.valor} onClick={() => onSelecionar(op.valor)} className="flex-1 text-xs font-medium py-2.5 rounded-xl transition-colors" style={{ backgroundColor: valorSelecionado === op.valor ? COR.acentoReal : "#22252B", color: valorSelecionado === op.valor ? COR.bg : COR.textoPrincipal }}>
+            {op.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// COMPONENTES DE APOIO
+// ============================================================================
+function DotPulsante({ cx, cy, cor }) {
+  if (cx == null || cy == null) return null;
+  return (
+    <g>
+      <circle cx={cx} cy={cy} r={7} fill={cor} opacity={0.18} />
+      <circle cx={cx} cy={cy} r={3.5} fill={cor} stroke="#fff" strokeWidth={1.5} />
+    </g>
+  );
+}
+
+function AccordionSection({ titulo, subtitulo, icone, aberto, onToggle, children }) {
+  return (
+    <div className="mx-5 mt-4 rounded-3xl overflow-hidden" style={{ backgroundColor: COR.card, border: `1px solid ${COR.borda}` }}>
+      <button onClick={onToggle} className="w-full flex items-center justify-between px-5 py-4">
+        <div className="flex items-center gap-2.5 text-left">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "#22252B" }}>{icone}</div>
+          <div>
+            <p className="text-sm font-semibold" style={{ color: COR.textoPrincipal }}>{titulo}</p>
+            {subtitulo && <p className="text-[11px]" style={{ color: COR.textoSecundario }}>{subtitulo}</p>}
+          </div>
+        </div>
+        {aberto ? <ChevronUp size={18} style={{ color: COR.textoSecundario }} /> : <ChevronDown size={18} style={{ color: COR.textoSecundario }} />}
+      </button>
+      {aberto && <div className="px-5 pb-5 pt-1 border-t" style={{ borderColor: COR.borda }}>{children}</div>}
+    </div>
+  );
+}
+
+function BottomSheet({ children, corDestaque }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ backgroundColor: "rgba(15,17,20,0.4)" }}>
+      <div className="w-full max-w-[430px] rounded-t-3xl p-5 pb-8 max-h-[85vh] overflow-y-auto" style={{ backgroundColor: COR.card, borderTop: corDestaque ? `3px solid ${corDestaque}` : undefined }}>
+        <div className="w-10 h-1 rounded-full mx-auto mb-4" style={{ backgroundColor: COR.borda }} />
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function ModalConfirmarData({ agendamento, posicao, hoje, onConfirmar, onFechar }) {
+  const [dataEscolhida, setDataEscolhida] = useState(paraInputDate(hoje));
+  return (
+    <BottomSheet corDestaque={COR.atraso}>
+      <div className="flex items-center gap-2 mb-1">
+        <CalendarClock size={16} style={{ color: COR.atraso }} />
+        <p className="text-xs font-semibold" style={{ color: COR.atraso }}>Confirmar aplicação atrasada</p>
+      </div>
+      <p className="text-sm mb-4" style={{ color: COR.textoPrincipal }}>
+        A {posicao}ª aplicação de <strong>{agendamento.compostoNome}</strong> estava programada para <strong>{formatarDataCurta(agendamento.dataProgramada)}</strong>. Quando ela foi realmente feita?
+      </p>
+      <div className="flex gap-2 mb-3">
+        <button onClick={() => setDataEscolhida(paraInputDate(agendamento.dataProgramada))} className="flex-1 text-xs font-medium py-2.5 rounded-xl" style={{ backgroundColor: dataEscolhida === paraInputDate(agendamento.dataProgramada) ? COR.acentoRealClaro : "#22252B", color: dataEscolhida === paraInputDate(agendamento.dataProgramada) ? COR.acentoReal : COR.textoPrincipal }}>
+          No dia programado ({formatarDataCurta(agendamento.dataProgramada)})
+        </button>
+        <button onClick={() => setDataEscolhida(paraInputDate(hoje))} className="flex-1 text-xs font-medium py-2.5 rounded-xl" style={{ backgroundColor: dataEscolhida === paraInputDate(hoje) ? COR.acentoRealClaro : "#22252B", color: dataEscolhida === paraInputDate(hoje) ? COR.acentoReal : COR.textoPrincipal }}>
+          Hoje ({formatarDataCurta(hoje)})
+        </button>
+      </div>
+      <p className="text-[11px] font-medium mb-1.5" style={{ color: COR.textoSecundario }}>Ou escolha outra data:</p>
+      <input type="date" value={dataEscolhida} max={paraInputDate(hoje)} onChange={(e) => setDataEscolhida(e.target.value)} className="w-full px-3 py-2.5 rounded-xl text-sm mb-5" style={{ border: `1px solid ${COR.borda}`, color: COR.textoPrincipal, backgroundColor: COR.card, colorScheme: "dark" }} />
+      <div className="flex gap-2">
+        <button onClick={onFechar} className="flex-1 text-sm font-medium py-3 rounded-xl" style={{ backgroundColor: "#22252B", color: COR.textoPrincipal }}>Cancelar</button>
+        <button onClick={() => onConfirmar(deInputDate(dataEscolhida))} className="flex-1 text-sm font-medium py-3 rounded-xl" style={{ backgroundColor: COR.acentoReal, color: COR.bg }}>Confirmar</button>
+      </div>
+    </BottomSheet>
+  );
+}
+
+function ModalDesfazerCheckin({ agendamento, posicao, onConfirmar, onFechar }) {
+  return (
+    <BottomSheet corDestaque={COR.perdido}>
+      <div className="flex items-center gap-2 mb-1">
+        <RotateCcw size={16} style={{ color: COR.perdido }} />
+        <p className="text-xs font-semibold" style={{ color: COR.perdido }}>Desfazer check-in</p>
+      </div>
+      <p className="text-sm mb-5" style={{ color: COR.textoPrincipal }}>
+        Desfazer o check-in da {posicao}ª aplicação de <strong>{agendamento.compostoNome}</strong> ({formatarDataCurta(agendamento.dataProgramada)})? Ela voltará para pendente.
+      </p>
+      <div className="flex gap-2">
+        <button onClick={onFechar} className="flex-1 text-sm font-medium py-3 rounded-xl" style={{ backgroundColor: "#22252B", color: COR.textoPrincipal }}>Cancelar</button>
+        <button onClick={onConfirmar} className="flex-1 text-sm font-medium py-3 rounded-xl text-white" style={{ backgroundColor: COR.perdido }}>Desfazer</button>
+      </div>
+    </BottomSheet>
+  );
+}
+
+/** Editar marca, custo, dose, frequência, estoque, cor — ou excluir o composto direto no cronograma. */
+function ModalEditarComposto({ item, onSalvar, onExcluir, onFechar }) {
+  const [marca, setMarca] = useState(item.marca || "");
+  const [custoPorFrasco, setCustoPorFrasco] = useState(item.custoPorFrasco || 0);
+  const [volumeFrascoMl, setVolumeFrascoMl] = useState(item.volumeFrascoMl || 10);
+  const [concentracaoMgMl, setConcentracaoMgMl] = useState(item.concentracaoMgMl || 250);
+  const [vialMg, setVialMg] = useState(item.vialMg || 5);
+  const [volumeDiluenteMl, setVolumeDiluenteMl] = useState(item.volumeDiluenteMl || 2);
+  const [frascosComprados, setFrascosComprados] = useState(item.frascosComprados || 1);
+  const [doseExibicao, setDoseExibicao] = useState(item.doseExibicao ?? item.dose);
+  const [frequenciaKey, setFrequenciaKey] = useState(() => encontrarChaveFrequencia(item.frequencia));
+  const [intervaloPersonalizado, setIntervaloPersonalizado] = useState(() => obterIntervaloParaEdicao(item.frequencia));
+  const [cor, setCor] = useState(item.cor);
+  const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
+  const ehHormonio = item.categoria === "hormonio";
+  const corPadrao = ehHormonio ? PALETA_TIPOS_HORMONIO[item.tipoHormonio] : CORPADRAO_PEPTIDEO;
+  const unidadeExibicao = item.unidadeExibicao || item.unidade;
+  const frequenciaFinal = frequenciaKey === "personalizado" ? { tipo: "intervalo", valor: Number(intervaloPersonalizado) || 1 } : OPCOES_FREQUENCIA.find((o) => o.key === frequenciaKey).paraItem;
+
+  const estoqueInfo = calcularEstoqueItem({ ...item, frascosComprados: Number(frascosComprados) || 0 });
+
+  return (
+    <BottomSheet corDestaque={cor}>
+      <div className="flex items-center gap-2 mb-1">
+        <Pencil size={16} style={{ color: cor }} />
+        <p className="text-xs font-semibold" style={{ color: cor }}>Editar {item.compostoNome}</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mt-3">
+        <div className="col-span-2">
+          <CampoTexto label="Marca ou fabricante:" valor={marca} onChange={setMarca} />
+        </div>
+
+        <CampoNumero label={`Dose por aplicação (${unidadeExibicao}):`} valor={doseExibicao} onChange={setDoseExibicao} />
+        <CampoSelect label="Frequência:" valor={frequenciaKey} onChange={setFrequenciaKey} opcoes={OPCOES_FREQUENCIA.map((o) => ({ valor: o.key, label: o.label }))} />
+        {frequenciaKey === "personalizado" && (
+          <div className="col-span-2">
+            <CampoNumero label="Intervalo entre aplicações (dias, 1 a 90):" valor={intervaloPersonalizado} onChange={setIntervaloPersonalizado} min={1} />
+          </div>
+        )}
+
+        {ehHormonio ? (
+          <>
+            <CampoNumero label="Volume do frasco (ml):" valor={volumeFrascoMl} onChange={setVolumeFrascoMl} />
+            <CampoNumero label="Concentração (mg/ml):" valor={concentracaoMgMl} onChange={setConcentracaoMgMl} />
+          </>
+        ) : (
+          <>
+            <CampoNumero label="Mg por ampola:" valor={vialMg} onChange={setVialMg} />
+            <CampoNumero label="Diluente (ml):" valor={volumeDiluenteMl} onChange={setVolumeDiluenteMl} />
+          </>
+        )}
+
+        <CampoMoeda label="Custo por frasco:" valor={custoPorFrasco} onChange={setCustoPorFrasco} />
+        <CampoNumero label="Frascos/ampolas em estoque:" valor={frascosComprados} onChange={setFrascosComprados} min={0} />
+      </div>
+
+      {estoqueInfo && (
+        <div className="mt-3 rounded-xl p-3" style={{ backgroundColor: estoqueInfo.baixoEstoque ? COR.atrasoClaro : "#22252B" }}>
+          <p className="text-xs font-medium" style={{ color: estoqueInfo.baixoEstoque ? COR.atraso : COR.textoSecundario }}>
+            {estoqueInfo.dosesRestantesEstoque > 0
+              ? `${estoqueInfo.dosesRestantesEstoque} dose(s) restantes no estoque · esgota em ${formatarDataCurta(estoqueInfo.dataEsgotamento)}`
+              : "Estoque esgotado"}
+          </p>
+        </div>
+      )}
+
+      <div className="mt-4">
+        <div className="flex items-center justify-between mb-1.5">
+          <p className="text-xs font-medium" style={{ color: COR.textoSecundario }}>Cor do composto:</p>
+          {cor !== corPadrao && (
+            <button onClick={() => setCor(corPadrao)} className="text-[11px] font-medium" style={{ color: COR.textoSecundario }}>Usar cor padrão</button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {PALETA_SELECIONAVEL.map((p) => (
+            <button key={p.cor} onClick={() => setCor(p.cor)} aria-label={p.nome} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: p.cor, border: cor === p.cor ? `2px solid ${COR.textoPrincipal}` : "2px solid transparent" }}>
+              {cor === p.cor && <Check size={14} color={corTextoContraste(p.cor)} strokeWidth={3} />}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {!confirmandoExclusao ? (
+        <div className="flex gap-2 mt-6">
+          <button onClick={onFechar} className="flex-1 text-sm font-medium py-3 rounded-xl" style={{ backgroundColor: "#22252B", color: COR.textoPrincipal }}>Cancelar</button>
+          <button
+            onClick={() => {
+              const novaDoseExibicao = Number(doseExibicao) || 0;
+              const novaDoseInterna = unidadeExibicao === "mg" && item.unidade === "mcg" ? novaDoseExibicao * 1000 : novaDoseExibicao;
+              onSalvar({
+                marca,
+                custoPorFrasco: Number(custoPorFrasco) || 0,
+                frascosComprados: Number(frascosComprados) || 0,
+                cor,
+                dose: novaDoseInterna,
+                doseExibicao: novaDoseExibicao,
+                frequencia: frequenciaFinal,
+                ...(ehHormonio ? { volumeFrascoMl: Number(volumeFrascoMl) || 0, concentracaoMgMl: Number(concentracaoMgMl) || 0 } : { vialMg: Number(vialMg) || 0, volumeDiluenteMl: Number(volumeDiluenteMl) || 0 }),
+              });
+            }}
+            className="flex-1 text-sm font-medium py-3 rounded-xl"
+            style={{ backgroundColor: COR.acentoReal, color: COR.bg }}
+          >
+            Salvar
+          </button>
+        </div>
+      ) : (
+        <div className="mt-6 rounded-xl p-3" style={{ backgroundColor: COR.perdidoClaro }}>
+          <p className="text-xs font-medium mb-3" style={{ color: COR.perdido }}>Excluir este composto do ciclo? Essa ação não pode ser desfeita.</p>
+          <div className="flex gap-2">
+            <button onClick={() => setConfirmandoExclusao(false)} className="flex-1 text-sm font-medium py-2.5 rounded-xl" style={{ backgroundColor: "#22252B", color: COR.textoPrincipal }}>Cancelar</button>
+            <button onClick={onExcluir} className="flex-1 text-sm font-medium py-2.5 rounded-xl text-white" style={{ backgroundColor: COR.perdido }}>Excluir definitivamente</button>
+          </div>
+        </div>
+      )}
+
+      {!confirmandoExclusao && (
+        <button onClick={() => setConfirmandoExclusao(true)} className="flex items-center justify-center gap-1.5 w-full text-xs font-medium mt-3 py-2" style={{ color: COR.perdido }}>
+          <Trash2 size={13} /> Excluir composto
+        </button>
+      )}
+    </BottomSheet>
+  );
+}
+
+function CardAplicacao({ agendamento, posicao, hoje, cor, onMarcarNoHorario, onAbrirModalAtraso, onPedirDesfazer }) {
+  const ehHoje = mesmoDia(agendamento.dataProgramada, hoje);
+  const ehFutura = agendamento.dataProgramada > hoje && !ehHoje;
+  const perdida = !agendamento.realizada && !ehFutura && !ehHoje;
+  const atrasada = agendamento.realizada && agendamento.dataReal && diferencaEmDias(agendamento.dataProgramada, agendamento.dataReal) > 0.4;
+  const corClara = `${cor}22`;
+
+  return (
+    <div className="flex items-center gap-3 py-3 px-4 rounded-2xl" style={{ backgroundColor: COR.card, border: `1px solid ${COR.borda}`, borderLeft: `3px solid ${cor}` }}>
+      <div className="flex flex-col items-center justify-center w-11 shrink-0">
+        <span className="text-[10px]" style={{ color: COR.textoSecundario }}>{formatarDiaSemana(agendamento.dataProgramada)}</span>
+        <span className="text-base font-semibold" style={{ color: COR.textoPrincipal }}>{agendamento.dataProgramada.getDate()}</span>
+      </div>
+      <div className="w-px self-stretch" style={{ backgroundColor: COR.borda }} />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate" style={{ color: COR.textoPrincipal }}>{agendamento.compostoNome}</p>
+        <p className="text-xs" style={{ color: COR.textoSecundario }}>
+          {formatarNumeroBR(agendamento.doseExibicao)}{agendamento.unidadeExibicao} · {posicao}ª dose
+          {ehHoje && <span className="ml-1.5 font-medium" style={{ color: cor }}>· Hoje</span>}
+          {perdida && <span className="ml-1.5 font-medium" style={{ color: COR.perdido }}>· Atrasada</span>}
+          {atrasada && <span className="ml-1.5 font-medium" style={{ color: COR.atraso }}>· Confirmada com {Math.round(diferencaEmDias(agendamento.dataProgramada, agendamento.dataReal))}d de atraso</span>}
+        </p>
+      </div>
+
+      {agendamento.realizada ? (
+        <button onClick={() => onPedirDesfazer(agendamento)} className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 active:scale-90 transition-transform" style={{ backgroundColor: atrasada ? COR.atrasoClaro : corClara }} title="Tocar para desfazer">
+          <Check size={16} color={atrasada ? COR.atraso : cor} strokeWidth={2.5} />
+        </button>
+      ) : ehFutura ? (
+        <span className="text-[11px] font-medium px-2.5 py-1.5 rounded-lg shrink-0" style={{ color: COR.textoSecundario, backgroundColor: "#22252B" }}>Agendada</span>
+      ) : ehHoje ? (
+        <button onClick={() => onMarcarNoHorario(agendamento.id)} className="text-xs font-medium px-3 py-2 rounded-lg shrink-0 active:scale-95 transition-transform" style={{ color: corTextoContraste(cor), backgroundColor: cor }}>Marcar feito</button>
+      ) : (
+        <button onClick={() => onAbrirModalAtraso(agendamento)} className="text-xs font-medium px-3 py-2 rounded-lg shrink-0 active:scale-95 transition-transform" style={{ color: "#fff", backgroundColor: COR.perdido }}>Confirmar</button>
+      )}
+    </div>
+  );
+}
+
+/** Barra visual da seringa — preenchimento proporcional às UI a puxar. */
+function SeringaVisual({ unidadesParaPuxar, tamanhoSeringaUi, excede }) {
+  const marcas = [];
+  for (let m = 10; m <= tamanhoSeringaUi; m += 10) marcas.push(m);
+  const percentualPreenchido = Math.min((unidadesParaPuxar / tamanhoSeringaUi) * 100, 100);
+  const cor = excede ? COR.perdido : COR.acentoPeptideo;
+  return (
+    <div>
+      <div className="relative h-8 rounded-full overflow-hidden" style={{ backgroundColor: "#22252B", border: `1px solid ${COR.borda}` }}>
+        <div className="absolute inset-y-0 left-0 rounded-full transition-all" style={{ width: `${percentualPreenchido}%`, backgroundColor: cor, opacity: 0.85 }} />
+      </div>
+      <div className="flex justify-between mt-1 px-0.5">
+        {marcas.map((m) => (
+          <span key={m} className="text-[9px]" style={{ color: COR.textoSecundario }}>{m}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// CALCULADORA DE DILUIÇÃO DE PEPTÍDEOS (standalone)
+// ============================================================================
+function CalculadoraDiluicaoPeptideos() {
+  const [vialMg, setVialMg] = useState(5);
+  const [volumeDiluenteMl, setVolumeDiluenteMl] = useState(2);
+  const [unidadeDose, setUnidadeDose] = useState("mcg");
+  const [doseAlvo, setDoseAlvo] = useState(250);
+  const [tamanhoSeringaUi, setTamanhoSeringaUi] = useState(50);
+
+  const doseMcgConvertida = useMemo(() => converterParaMcg(doseAlvo, unidadeDose), [doseAlvo, unidadeDose]);
+  const resultado = useMemo(() => calcularDoseSeringa(vialMg, volumeDiluenteMl, doseMcgConvertida, tamanhoSeringaUi), [vialMg, volumeDiluenteMl, doseMcgConvertida, tamanhoSeringaUi]);
+
+  return (
+    <div className="flex flex-col gap-4 pt-3">
+      <div className="grid grid-cols-2 gap-3">
+        <CampoNumero label="Mg por ampola:" valor={vialMg} onChange={setVialMg} />
+        <CampoNumero label="Diluente (ml):" valor={volumeDiluenteMl} onChange={setVolumeDiluenteMl} />
+      </div>
+
+      <div>
+        <div className="flex items-center gap-3 mb-1.5">
+          <p className="text-xs font-medium" style={{ color: COR.textoSecundario }}>Dose alvo:</p>
+        </div>
+        <div className="flex gap-2 items-stretch">
+          <input type="number" value={doseAlvo} onChange={(e) => setDoseAlvo(e.target.value)} className="w-24 px-3 py-2.5 rounded-xl text-sm" style={{ border: `1px solid ${COR.borda}`, color: COR.textoPrincipal, backgroundColor: COR.card, colorScheme: "dark" }} />
+          <div className="flex-1 flex gap-2">
+            {[{ valor: "mg", label: "Miligrama" }, { valor: "mcg", label: "Micrograma" }].map((op) => (
+              <button key={op.valor} onClick={() => setUnidadeDose(op.valor)} className="flex-1 text-xs font-medium rounded-xl" style={{ backgroundColor: unidadeDose === op.valor ? COR.acentoReal : "#22252B", color: unidadeDose === op.valor ? COR.bg : COR.textoPrincipal }}>
+                {op.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <CampoSelect label="Tamanho da seringa:" valor={tamanhoSeringaUi} onChange={(v) => setTamanhoSeringaUi(Number(v))} opcoes={[{ valor: 30, label: "30 UI" }, { valor: 50, label: "50 UI" }, { valor: 100, label: "100 UI" }]} />
+
+      {resultado && (
+        <div className="rounded-2xl p-4" style={{ backgroundColor: COR.acentoPeptideoClaro }}>
+          <p className="text-xs mb-3" style={{ color: COR.textoSecundario }}>
+            Concentração: <strong style={{ color: COR.textoPrincipal }}>{resultado.concentracaoMcgMl} mcg/ml</strong> · Cada UI equivale a <strong style={{ color: COR.textoPrincipal }}>{resultado.mcgPorUi} mcg</strong>
+          </p>
+          <SeringaVisual unidadesParaPuxar={resultado.unidadesParaPuxar} tamanhoSeringaUi={tamanhoSeringaUi} excede={resultado.excede} />
+          <p className="text-sm font-medium mt-3" style={{ color: resultado.excede ? COR.perdido : COR.acentoPeptideo }}>{resultado.mensagem}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// CALCULADORA DE ASPIRAÇÃO DE HORMÔNIOS
+// ============================================================================
+const LOCAIS_APLICACAO_IM = [
+  { valor: "gluteo", label: "Glúteo (dorso/ventroglúteo)", agulha: "25G ou 23G x 1½\" (38mm)", volumeMax: 3 },
+  { valor: "vasto_lateral", label: "Vasto lateral (coxa)", agulha: "25G x 1\" a 1½\" (25-38mm)", volumeMax: 2 },
+  { valor: "deltoide", label: "Deltoide (ombro)", agulha: "25G ou 27G x 1\" (25mm)", volumeMax: 1 },
+];
+
+function recomendarSeringaVolume(volumeMl) {
+  if (volumeMl <= 1) return "Seringa de 1ml (insulina ou tuberculina)";
+  if (volumeMl <= 3) return "Seringa de 3ml";
+  return "Seringa de 5ml — considere dividir a dose em duas aplicações";
+}
+
+function CalculadoraAspiracaoHormonios() {
+  const [concentracaoMgMl, setConcentracaoMgMl] = useState(250);
+  const [doseAlvoMg, setDoseAlvoMg] = useState(250);
+  const [localValor, setLocalValor] = useState(LOCAIS_APLICACAO_IM[0].valor);
+  const local = LOCAIS_APLICACAO_IM.find((l) => l.valor === localValor);
+
+  const volumeMl = useMemo(() => {
+    const c = Number(concentracaoMgMl) || 0;
+    if (c <= 0) return null;
+    return arredondar2((Number(doseAlvoMg) || 0) / c);
+  }, [concentracaoMgMl, doseAlvoMg]);
+
+  const excedeVolumeLocal = volumeMl != null && local && volumeMl > local.volumeMax;
+
+  return (
+    <div className="flex flex-col gap-4 pt-3">
+      <div className="grid grid-cols-2 gap-3">
+        <CampoNumero label="Concentração (mg/ml):" valor={concentracaoMgMl} onChange={setConcentracaoMgMl} />
+        <CampoNumero label="Dose alvo (mg):" valor={doseAlvoMg} onChange={setDoseAlvoMg} />
+      </div>
+
+      <CampoSelect label="Local de aplicação (IM):" valor={localValor} onChange={setLocalValor} opcoes={LOCAIS_APLICACAO_IM.map((l) => ({ valor: l.valor, label: l.label }))} />
+
+      {volumeMl != null && (
+        <div className="rounded-2xl p-4" style={{ backgroundColor: COR.acentoRealClaro }}>
+          <p className="text-xs mb-1" style={{ color: COR.textoSecundario }}>Volume a aspirar:</p>
+          <p className="text-2xl font-bold" style={{ color: COR.acentoReal }}>{formatarNumeroBR(volumeMl)} ml</p>
+
+          <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${COR.borda}` }}>
+            <p className="text-xs" style={{ color: COR.textoSecundario }}>
+              Agulha recomendada para {local.label.toLowerCase()}: <strong style={{ color: COR.textoPrincipal }}>{local.agulha}</strong>
+            </p>
+            <p className="text-xs mt-1" style={{ color: COR.textoSecundario }}>
+              Seringa recomendada: <strong style={{ color: COR.textoPrincipal }}>{recomendarSeringaVolume(volumeMl)}</strong>
+            </p>
+          </div>
+
+          {excedeVolumeLocal && (
+            <p className="text-xs font-medium mt-3" style={{ color: COR.atraso }}>
+              Esse volume ({formatarNumeroBR(volumeMl)}ml) está acima do costumeiramente recomendado para {local.label.toLowerCase()} (até {local.volumeMax}ml). Considere outro local ou dividir a aplicação.
+            </p>
+          )}
+        </div>
+      )}
+
+      <p className="text-[11px]" style={{ color: COR.textoSecundario }}>
+        Recomendações de agulha/seringa são referências gerais de literatura para aplicação intramuscular — ajuste conforme orientação profissional e características individuais (composição corporal, viscosidade do óleo).
+      </p>
+    </div>
+  );
+}
+
+// ============================================================================
+// TELA B — Configurar Hormônio
+// ============================================================================
+function TelaConfigurarHormonio({ cicloNome, pesoCorporal, onCancelar, onSalvar }) {
+  const [tipo, setTipo] = useState(TIPOS_HORMONIO[0]);
+  const esteresDisponiveis = useMemo(() => CATALOGO_HORMONIOS.filter((h) => h.tipo === tipo), [tipo]);
+  const [ester, setEster] = useState(esteresDisponiveis[0].ester);
+  useEffect(() => setEster(CATALOGO_HORMONIOS.filter((h) => h.tipo === tipo)[0].ester), [tipo]);
+  const esterAtual = esteresDisponiveis.find((e) => e.ester === ester) || esteresDisponiveis[0];
+
+  const [dataInicioStr, setDataInicioStr] = useState(paraInputDate(HOJE));
+  const [duracaoSemanas, setDuracaoSemanas] = useState(10);
+  const [doseMg, setDoseMg] = useState(250);
+  const [frequenciaKey, setFrequenciaKey] = useState("duas_vezes_semana");
+  const [intervaloPersonalizado, setIntervaloPersonalizado] = useState(7);
+  const frequencia = frequenciaKey === "personalizado" ? { tipo: "intervalo", valor: Number(intervaloPersonalizado) || 1 } : OPCOES_FREQUENCIA.find((o) => o.key === frequenciaKey).paraItem;
+  const [marca, setMarca] = useState("");
+  const [volumeFrascoMl, setVolumeFrascoMl] = useState(10);
+  const [concentracaoMgMl, setConcentracaoMgMl] = useState(250);
+  const [custoPorFrasco, setCustoPorFrasco] = useState(0);
+  const [frascosComprados, setFrascosComprados] = useState(1);
+
+  const erroValidacao =
+    Number(doseMg) <= 0 ? "A dose por aplicação precisa ser maior que zero."
+    : Number(duracaoSemanas) < 1 ? "A duração do ciclo precisa ser de pelo menos 1 semana."
+    : Number(volumeFrascoMl) <= 0 ? "O volume do frasco precisa ser maior que zero."
+    : Number(concentracaoMgMl) <= 0 ? "A concentração precisa ser maior que zero."
+    : null;
+
+  const itemPreview = useMemo(
+    () =>
+      criarItem({
+        id: "preview",
+        categoria: "hormonio",
+        tipoHormonio: tipo,
+        compostoNome: `${tipo} ${esterAtual.ester}`,
+        meiaVidaDias: esterAtual.meiaVidaDias,
+        meiaVidaAbsorcao: esterAtual.meiaVidaAbsorcao,
+        fatorCalibracao: esterAtual.fatorCalibracao ?? 1,
+        fracao: esterAtual.fracao ?? 1,
+        dose: Number(doseMg) || 0,
+        unidade: "mg",
+        frequencia: frequencia,
+        dataInicio: deInputDate(dataInicioStr),
+        duracaoSemanas: Number(duracaoSemanas) || 1,
+        marca,
+        volumeFrascoMl: Number(volumeFrascoMl) || 0,
+        concentracaoMgMl: Number(concentracaoMgMl) || 0,
+        custoPorFrasco: Number(custoPorFrasco) || 0,
+      }),
+    [tipo, esterAtual, doseMg, frequencia, dataInicioStr, duracaoSemanas, marca, volumeFrascoMl, concentracaoMgMl, custoPorFrasco]
+  );
+
+  const pontosPreview = useMemo(() => {
+    const grupoUnico = [{ chave: "preview", nome: itemPreview.compostoNome, itens: [itemPreview] }];
+    return gerarDadosGraficoMultiGrupo(grupoUnico, somarDias(deInputDate(dataInicioStr), 3650), pesoCorporal);
+  }, [itemPreview, dataInicioStr, pesoCorporal]);
+  const custoInfo = useMemo(() => calcularCustoItem(itemPreview), [itemPreview]);
+
+  return (
+    <div className="w-full max-w-[430px]">
+      <div className="flex items-center gap-3 px-5 pt-6 pb-2">
+        <button onClick={onCancelar} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: COR.card, border: `1px solid ${COR.borda}` }}>
+          <ArrowLeft size={16} style={{ color: COR.textoPrincipal }} />
+        </button>
+        <div>
+          <p className="text-[11px]" style={{ color: COR.textoSecundario }}>{cicloNome}</p>
+          <h1 className="text-lg font-semibold" style={{ color: COR.textoPrincipal }}>Adicionar hormônio</h1>
+        </div>
+      </div>
+
+      <div className="px-5 pb-32 flex flex-col gap-4 mt-3">
+        <CampoSelect label="Tipo de hormônio:" valor={tipo} onChange={setTipo} opcoes={TIPOS_HORMONIO.map((t) => ({ valor: t, label: t }))} />
+        <CampoSelect label="Éster:" valor={ester} onChange={setEster} opcoes={esteresDisponiveis.map((e) => ({ valor: e.ester, label: `${e.ester} (${e.meiaVidaDias} dias de meia-vida)` }))} />
+        <div>
+          <Rotulo>Data de início:</Rotulo>
+          <input type="date" value={dataInicioStr} onChange={(e) => setDataInicioStr(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl text-sm" style={{ border: `1px solid ${COR.borda}`, color: COR.textoPrincipal, backgroundColor: COR.card, colorScheme: "dark" }} />
+        </div>
+        <CampoNumero label="Duração do ciclo (semanas):" valor={duracaoSemanas} onChange={setDuracaoSemanas} />
+        <CampoNumero label="Dosagem por aplicação (mg):" valor={doseMg} onChange={setDoseMg} />
+        <CampoSelect label="Frequência de aplicação:" valor={frequenciaKey} onChange={setFrequenciaKey} opcoes={OPCOES_FREQUENCIA.map((o) => ({ valor: o.key, label: o.label }))} />
+        {frequenciaKey === "personalizado" && <CampoNumero label="Intervalo entre aplicações (dias, 1 a 90):" valor={intervaloPersonalizado} onChange={setIntervaloPersonalizado} min={1} />}
+
+        <div className="rounded-2xl p-4" style={{ backgroundColor: "#1E2126" }}>
+          <p className="text-xs font-medium mb-3 flex items-center gap-1.5" style={{ color: COR.textoSecundario }}>
+            <Beaker size={13} /> Frasco e custo:
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <CampoNumero label="Volume do frasco (ml):" valor={volumeFrascoMl} onChange={setVolumeFrascoMl} />
+            <CampoNumero label="Concentração (mg/ml):" valor={concentracaoMgMl} onChange={setConcentracaoMgMl} />
+            <CampoTexto label="Marca ou fabricante:" valor={marca} onChange={setMarca} placeholder="Ex: Hilma Biocare" />
+            <CampoMoeda label="Custo por frasco:" valor={custoPorFrasco} onChange={setCustoPorFrasco} />
+            <CampoNumero label="Frascos em estoque:" valor={frascosComprados} onChange={setFrascosComprados} min={0} />
+          </div>
+        </div>
+
+        <div className="rounded-3xl p-4" style={{ backgroundColor: COR.card, border: `1px solid ${COR.borda}` }}>
+          <p className="text-xs font-medium mb-1" style={{ color: COR.textoSecundario }}>Prévia — nível ativo estimado (ajustado por peso):</p>
+          <p className="text-[11px] mb-2" style={{ color: COR.textoSecundario }}>
+            {itemPreview.agendamentos.length} aplicações programadas
+            {custoInfo && <> · <span style={{ color: COR.acentoReal, fontWeight: 500 }}>R$ {formatarBRL(custoInfo.custoPorDose)}/dose</span> · {custoInfo.frascosNecessarios} frasco(s) (R$ {formatarBRL(custoInfo.custoTotalCiclo)})</>}
+          </p>
+          <div className="h-32 -ml-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={pontosPreview.slice(0, 56)} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                <CartesianGrid vertical={false} stroke={COR.borda} />
+                <XAxis dataKey="label" tick={{ fontSize: 9, fill: COR.textoSecundario }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                <YAxis tick={{ fontSize: 9, fill: COR.textoSecundario }} axisLine={false} tickLine={false} width={34} domain={[0, "dataMax + 100"]} label={{ value: "ng/dL", angle: -90, position: "insideLeft", fontSize: 9, fill: COR.textoSecundario }} />
+                <Tooltip contentStyle={{ borderRadius: 12, border: `1px solid ${COR.borda}`, fontSize: 12, backgroundColor: COR.card, color: COR.textoPrincipal }} formatter={(v) => [`${v} ng/dL`, "Nível estimado"]} />
+                <Line type="monotone" dataKey="preview_prevista" stroke={PALETA_TIPOS_HORMONIO[tipo] || COR.acentoReal} strokeWidth={2} dot={false} isAnimationActive={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] p-5 pt-3" style={{ background: `linear-gradient(to top, ${COR.bg} 60%, transparent)` }}>
+        {erroValidacao && <p className="text-xs font-medium mb-2 text-center" style={{ color: COR.perdido }}>{erroValidacao}</p>}
+        <button
+          disabled={!!erroValidacao}
+          onClick={() =>
+            onSalvar({
+              categoria: "hormonio",
+              tipoHormonio: tipo,
+              compostoNome: `${tipo} ${esterAtual.ester}`,
+              meiaVidaDias: esterAtual.meiaVidaDias,
+              meiaVidaAbsorcao: esterAtual.meiaVidaAbsorcao,
+              fatorCalibracao: esterAtual.fatorCalibracao ?? 1,
+              fracao: esterAtual.fracao ?? 1,
+              dose: Number(doseMg) || 0,
+              unidade: "mg",
+              frequencia: frequencia,
+              dataInicio: deInputDate(dataInicioStr),
+              duracaoSemanas: Number(duracaoSemanas) || 1,
+              marca,
+              volumeFrascoMl: Number(volumeFrascoMl) || 0,
+              concentracaoMgMl: Number(concentracaoMgMl) || 0,
+              custoPorFrasco: Number(custoPorFrasco) || 0,
+              frascosComprados: Number(frascosComprados) || 0,
+              cor: PALETA_TIPOS_HORMONIO[tipo],
+            })
+          }
+          className="w-full text-sm font-medium py-3.5 rounded-2xl"
+          style={{ backgroundColor: erroValidacao ? "#3A3E45" : COR.acentoReal, color: erroValidacao ? COR.textoSecundario : COR.bg, boxShadow: erroValidacao ? "none" : `0 8px 20px ${COR.acentoReal}44` }}
+        >
+          Adicionar composto ao ciclo
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// TELA B — Configurar Peptídeo
+// ============================================================================
+function TelaConfigurarPeptideo({ cicloNome, onCancelar, onSalvar }) {
+  const [peptideoNome, setPeptideoNome] = useState(CATALOGO_PEPTIDEOS[0].nome);
+  const peptideo = CATALOGO_PEPTIDEOS.find((p) => p.nome === peptideoNome);
+  const [dataInicioStr, setDataInicioStr] = useState(paraInputDate(HOJE));
+  const [duracaoSemanas, setDuracaoSemanas] = useState(8);
+  const [unidadeDose, setUnidadeDose] = useState("mcg");
+  const [doseAlvo, setDoseAlvo] = useState(250);
+  const [frequenciaKey, setFrequenciaKey] = useState("diaria");
+  const [intervaloPersonalizado, setIntervaloPersonalizado] = useState(7);
+  const frequencia = frequenciaKey === "personalizado" ? { tipo: "intervalo", valor: Number(intervaloPersonalizado) || 1 } : OPCOES_FREQUENCIA.find((o) => o.key === frequenciaKey).paraItem;
+  const [vialMg, setVialMg] = useState(5);
+  const [volumeDiluenteMl, setVolumeDiluenteMl] = useState(2);
+  const [tamanhoSeringaUi, setTamanhoSeringaUi] = useState(50);
+  const [marca, setMarca] = useState("");
+  const [custoPorFrasco, setCustoPorFrasco] = useState(0);
+  const [frascosComprados, setFrascosComprados] = useState(1);
+
+  const erroValidacao =
+    Number(doseAlvo) <= 0 ? "A dose alvo precisa ser maior que zero."
+    : Number(duracaoSemanas) < 1 ? "A duração precisa ser de pelo menos 1 semana."
+    : Number(vialMg) <= 0 ? "A quantidade de mg por ampola precisa ser maior que zero."
+    : Number(volumeDiluenteMl) <= 0 ? "O volume de diluente precisa ser maior que zero."
+    : null;
+
+  const doseMcgConvertida = useMemo(() => converterParaMcg(doseAlvo, unidadeDose), [doseAlvo, unidadeDose]);
+
+  const itemPreview = useMemo(
+    () =>
+      criarItem({
+        id: "preview",
+        categoria: "peptideo",
+        compostoNome: peptideo.nome,
+        meiaVidaDias: peptideo.meiaVidaDias,
+        dose: doseMcgConvertida,
+        unidade: "mcg",
+        doseExibicao: Number(doseAlvo),
+        unidadeExibicao: unidadeDose,
+        frequencia: frequencia,
+        dataInicio: deInputDate(dataInicioStr),
+        duracaoSemanas: Number(duracaoSemanas) || 1,
+        marca,
+        vialMg: Number(vialMg) || 0,
+        volumeDiluenteMl: Number(volumeDiluenteMl) || 0,
+        tamanhoSeringaUi,
+        custoPorFrasco: Number(custoPorFrasco) || 0,
+      }),
+    [peptideo, doseMcgConvertida, doseAlvo, unidadeDose, frequencia, dataInicioStr, duracaoSemanas, marca, vialMg, volumeDiluenteMl, tamanhoSeringaUi, custoPorFrasco]
+  );
+
+  const pontosPreview = useMemo(() => gerarDadosGrafico([itemPreview], somarDias(deInputDate(dataInicioStr), 3650)), [itemPreview, dataInicioStr]);
+  const custoInfo = useMemo(() => calcularCustoItem(itemPreview), [itemPreview]);
+  const reconstituicao = useMemo(() => calcularDoseSeringa(vialMg, volumeDiluenteMl, doseMcgConvertida, tamanhoSeringaUi), [vialMg, volumeDiluenteMl, doseMcgConvertida, tamanhoSeringaUi]);
+
+  return (
+    <div className="w-full max-w-[430px]">
+      <div className="flex items-center gap-3 px-5 pt-6 pb-2">
+        <button onClick={onCancelar} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: COR.card, border: `1px solid ${COR.borda}` }}>
+          <ArrowLeft size={16} style={{ color: COR.textoPrincipal }} />
+        </button>
+        <div>
+          <p className="text-[11px]" style={{ color: COR.textoSecundario }}>{cicloNome}</p>
+          <h1 className="text-lg font-semibold" style={{ color: COR.textoPrincipal }}>Adicionar peptídeo</h1>
+        </div>
+      </div>
+
+      <div className="px-5 pb-32 flex flex-col gap-4 mt-3">
+        <CampoSelect label="Peptídeo:" valor={peptideoNome} onChange={setPeptideoNome} opcoes={CATALOGO_PEPTIDEOS.map((p) => ({ valor: p.nome, label: p.nome }))} />
+        <p className="text-[11px] -mt-3" style={{ color: COR.textoSecundario }}>Meia-vida de referência: {peptideo.meiaVidaDias} dias</p>
+
+        <div>
+          <Rotulo>Data de início:</Rotulo>
+          <input type="date" value={dataInicioStr} onChange={(e) => setDataInicioStr(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl text-sm" style={{ border: `1px solid ${COR.borda}`, color: COR.textoPrincipal, backgroundColor: COR.card, colorScheme: "dark" }} />
+        </div>
+        <CampoNumero label="Duração (semanas):" valor={duracaoSemanas} onChange={setDuracaoSemanas} />
+        <CampoSelect label="Frequência:" valor={frequenciaKey} onChange={setFrequenciaKey} opcoes={OPCOES_FREQUENCIA.map((o) => ({ valor: o.key, label: o.label }))} />
+        {frequenciaKey === "personalizado" && <CampoNumero label="Intervalo entre aplicações (dias, 1 a 90):" valor={intervaloPersonalizado} onChange={setIntervaloPersonalizado} min={1} />}
+
+        <div className="rounded-2xl p-4" style={{ backgroundColor: "#1E2126" }}>
+          <p className="text-xs font-medium mb-3 flex items-center gap-1.5" style={{ color: COR.textoSecundario }}>
+            <Beaker size={13} /> Reconstituição:
+          </p>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <CampoNumero label="Mg por ampola:" valor={vialMg} onChange={setVialMg} />
+            <CampoNumero label="Diluente (ml):" valor={volumeDiluenteMl} onChange={setVolumeDiluenteMl} />
+          </div>
+
+          <div className="mb-3">
+            <p className="text-xs font-medium mb-1.5" style={{ color: COR.textoSecundario }}>Dose alvo:</p>
+            <div className="flex gap-2">
+              <input type="number" value={doseAlvo} onChange={(e) => setDoseAlvo(e.target.value)} className="w-24 px-3 py-2.5 rounded-xl text-sm" style={{ border: `1px solid ${COR.borda}`, color: COR.textoPrincipal, backgroundColor: COR.card }} />
+              <div className="flex-1 flex gap-2">
+                {[{ valor: "mg", label: "Miligrama" }, { valor: "mcg", label: "Micrograma" }].map((op) => (
+                  <button key={op.valor} onClick={() => setUnidadeDose(op.valor)} className="flex-1 text-xs font-medium rounded-xl" style={{ backgroundColor: unidadeDose === op.valor ? COR.acentoReal : COR.card, color: unidadeDose === op.valor ? COR.bg : COR.textoPrincipal, border: `1px solid ${COR.borda}` }}>
+                    {op.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <CampoSelect label="Seringa:" valor={tamanhoSeringaUi} onChange={(v) => setTamanhoSeringaUi(Number(v))} opcoes={[{ valor: 30, label: "30 UI" }, { valor: 50, label: "50 UI" }, { valor: 100, label: "100 UI" }]} />
+
+          {reconstituicao && (
+            <div className="mt-3">
+              <SeringaVisual unidadesParaPuxar={reconstituicao.unidadesParaPuxar} tamanhoSeringaUi={tamanhoSeringaUi} excede={reconstituicao.excede} />
+              <p className="text-xs font-medium mt-2" style={{ color: reconstituicao.excede ? COR.perdido : COR.acentoPeptideo }}>{reconstituicao.mensagem}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <CampoTexto label="Marca ou fabricante:" valor={marca} onChange={setMarca} placeholder="Ex: PeptideLab" />
+          <CampoMoeda label="Custo por frasco:" valor={custoPorFrasco} onChange={setCustoPorFrasco} />
+          <CampoNumero label="Ampolas em estoque:" valor={frascosComprados} onChange={setFrascosComprados} min={0} />
+        </div>
+
+        <div className="rounded-3xl p-4" style={{ backgroundColor: COR.card, border: `1px solid ${COR.borda}` }}>
+          <p className="text-xs font-medium mb-1" style={{ color: COR.textoSecundario }}>Prévia da concentração prevista:</p>
+          <p className="text-[11px] mb-2" style={{ color: COR.textoSecundario }}>
+            {itemPreview.agendamentos.length} aplicações
+            {custoInfo && <> · <span style={{ color: COR.acentoPeptideo, fontWeight: 500 }}>R$ {formatarBRL(custoInfo.custoPorDose)}/dose</span> · {custoInfo.frascosNecessarios} frasco(s) (R$ {formatarBRL(custoInfo.custoTotalCiclo)})</>}
+          </p>
+          <div className="h-32 -ml-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={pontosPreview.slice(0, 30)} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                <CartesianGrid vertical={false} stroke={COR.borda} />
+                <XAxis dataKey="label" tick={{ fontSize: 9, fill: COR.textoSecundario }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                <YAxis tick={{ fontSize: 9, fill: COR.textoSecundario }} axisLine={false} tickLine={false} width={34} domain={["dataMin", "dataMax + 30"]} label={{ value: "mcg", angle: -90, position: "insideLeft", fontSize: 9, fill: COR.textoSecundario }} />
+                <Tooltip contentStyle={{ borderRadius: 12, border: `1px solid ${COR.borda}`, fontSize: 12, backgroundColor: COR.card, color: COR.textoPrincipal }} formatter={(v) => [`${v} mcg`, "Dosagem sérica"]} />
+                <Line type="monotone" dataKey="prevista" stroke={COR.acentoPeptideo} strokeWidth={2} dot={false} isAnimationActive={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] p-5 pt-3" style={{ background: `linear-gradient(to top, ${COR.bg} 60%, transparent)` }}>
+        {erroValidacao && <p className="text-xs font-medium mb-2 text-center" style={{ color: COR.perdido }}>{erroValidacao}</p>}
+        <button
+          disabled={!!erroValidacao}
+          onClick={() =>
+            onSalvar({
+              categoria: "peptideo",
+              compostoNome: peptideo.nome,
+              meiaVidaDias: peptideo.meiaVidaDias,
+              dose: doseMcgConvertida,
+              unidade: "mcg",
+              doseExibicao: Number(doseAlvo),
+              unidadeExibicao: unidadeDose,
+              frequencia: frequencia,
+              dataInicio: deInputDate(dataInicioStr),
+              duracaoSemanas: Number(duracaoSemanas) || 1,
+              marca,
+              vialMg: Number(vialMg) || 0,
+              volumeDiluenteMl: Number(volumeDiluenteMl) || 0,
+              tamanhoSeringaUi,
+              custoPorFrasco: Number(custoPorFrasco) || 0,
+              frascosComprados: Number(frascosComprados) || 0,
+              cor: CORPADRAO_PEPTIDEO,
+            })
+          }
+          className="w-full text-sm font-medium py-3.5 rounded-2xl"
+          style={{ backgroundColor: erroValidacao ? "#3A3E45" : COR.acentoReal, color: erroValidacao ? COR.textoSecundario : COR.bg, boxShadow: erroValidacao ? "none" : `0 8px 20px ${COR.acentoReal}44` }}
+        >
+          Adicionar composto ao ciclo
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// CARD DE NÍVEL — PEPTÍDEOS (linha única)
+// ============================================================================
+function CardNivelPeptideos({ pontosGrafico, periodo, setPeriodo, hoje }) {
+  const { dados, indiceHoje } = useMemo(() => computeDadosVisiveis(pontosGrafico, periodo, hoje), [pontosGrafico, periodo, hoje]);
+  const nivelAtual = pontosGrafico[indiceHoje]?.real ?? 0;
+  const nivelPrevisto = pontosGrafico[indiceHoje]?.prevista ?? 0;
+  const diferenca = arredondar1(nivelAtual - nivelPrevisto);
+
+  return (
+    <div className="rounded-3xl p-5" style={{ backgroundColor: COR.card, border: `1px solid ${COR.borda}` }}>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium" style={{ color: COR.textoSecundario }}>Nível sérico (peptídeos):</p>
+        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full" style={{ color: diferenca >= 0 ? COR.acentoPeptideo : COR.perdido, backgroundColor: diferenca >= 0 ? COR.acentoPeptideoClaro : COR.perdidoClaro }}>
+          {diferenca >= 0 ? "+" : ""}{formatarNumeroBR(diferenca)}mcg vs. plano
+        </span>
+      </div>
+      <div className="flex items-baseline gap-1.5 mt-1.5">
+        <span className="text-4xl font-bold tabular-nums" style={{ color: COR.textoPrincipal }}>{formatarNumeroBR(nivelAtual)}</span>
+        <span className="text-base font-medium" style={{ color: COR.textoSecundario }}>mcg</span>
+      </div>
+      <div className="flex gap-1 mt-4 p-1 rounded-xl w-fit" style={{ backgroundColor: "#22252B" }}>
+        {[{ label: "4S", valor: 4 }, { label: "8S", valor: 8 }, { label: "12S", valor: 12 }, { label: "Tudo", valor: null }].map((opt) => (
+          <button key={opt.label} onClick={() => setPeriodo(opt.valor)} className="text-xs font-medium px-3 py-1.5 rounded-lg transition-colors" style={{ backgroundColor: periodo === opt.valor ? COR.card : "transparent", color: periodo === opt.valor ? COR.textoPrincipal : COR.textoSecundario, boxShadow: periodo === opt.valor ? "0 1px 2px rgba(0,0,0,0.06)" : "none" }}>
+            {opt.label}
+          </button>
+        ))}
+      </div>
+      <div className="h-52 mt-3 -ml-2">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={dados} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+            <CartesianGrid vertical={false} stroke={COR.borda} />
+            <XAxis dataKey="label" tick={{ fontSize: 10, fill: COR.textoSecundario }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+            <YAxis tick={{ fontSize: 10, fill: COR.textoSecundario }} axisLine={false} tickLine={false} width={38} domain={["dataMin - 20", "dataMax + 40"]} label={{ value: "mcg", angle: -90, position: "insideLeft", fontSize: 9, fill: COR.textoSecundario }} />
+            <Tooltip contentStyle={{ borderRadius: 12, border: `1px solid ${COR.borda}`, fontSize: 12, backgroundColor: COR.card, color: COR.textoPrincipal }} />
+            <ReferenceLine x={pontosGrafico[indiceHoje]?.label} stroke={COR.textoSecundario} strokeDasharray="2 3" />
+            <Line type="monotone" dataKey="prevista" stroke={COR.prevista} strokeWidth={2} strokeDasharray="4 4" dot={false} isAnimationActive={false} />
+            <Line type="monotone" dataKey="real" stroke={COR.acentoPeptideo} strokeWidth={2.5} dot={(props) => (props.payload?.isUltimoReal ? <DotPulsante key={props.payload.offset} {...props} cor={COR.acentoPeptideo} /> : null)} isAnimationActive={false} connectNulls={false} />
+            <Brush dataKey="label" height={18} stroke={COR.acentoPeptideo} fill={COR.card} travellerWidth={8} tickFormatter={() => ""} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// CARD DE NÍVEL — HORMÔNIOS (multi-grupo, com Sobrepor/Comparar)
+// ============================================================================
+function CardNivelHormonios({ itens, periodo, setPeriodo, hoje, pesoCorporal = 70 }) {
+  const [modo, setModo] = useState("sobrepor");
+  const grupos = useMemo(() => agruparItensHormonio(itens, modo), [itens, modo]);
+  const pontos = useMemo(() => gerarDadosGraficoMultiGrupo(grupos, hoje, pesoCorporal), [grupos, hoje, pesoCorporal]);
+  const indiceHoje = useMemo(() => pontos.findIndex((p) => mesmoDia(p.dia, hoje)), [pontos]);
+
+  const dadosVisiveis = useMemo(() => {
+    if (pontos.length === 0) return [];
+    if (periodo === null) return pontos;
+    const janelaDias = periodo * 7;
+    const inicio = Math.max(0, indiceHoje - janelaDias);
+    const fim = Math.min(pontos.length - 1, indiceHoje + janelaDias);
+    return pontos.slice(inicio, fim + 1);
+  }, [pontos, periodo, indiceHoje]);
+
+  const nivelTotalAtual = arredondar1(grupos.reduce((soma, g) => soma + (pontos[indiceHoje]?.[`${g.chave}_real`] ?? 0), 0));
+
+  return (
+    <div className="rounded-3xl p-5" style={{ backgroundColor: COR.card, border: `1px solid ${COR.borda}` }}>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium" style={{ color: COR.textoSecundario }}>Nível plasmático (hormônios):</p>
+        <div className="flex gap-1 p-1 rounded-lg" style={{ backgroundColor: "#22252B" }}>
+          {[{ valor: "sobrepor", label: "Sobrepor" }, { valor: "comparar", label: "Comparar" }].map((op) => (
+            <button key={op.valor} onClick={() => setModo(op.valor)} className="text-[11px] font-medium px-2.5 py-1 rounded-md" style={{ backgroundColor: modo === op.valor ? COR.card : "transparent", color: modo === op.valor ? COR.textoPrincipal : COR.textoSecundario, boxShadow: modo === op.valor ? "0 1px 2px rgba(0,0,0,0.06)" : "none" }}>
+              {op.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-baseline gap-1.5 mt-1.5">
+        <span className="text-4xl font-bold tabular-nums" style={{ color: COR.textoPrincipal }}>{formatarNumeroBR(nivelTotalAtual)}</span>
+        <span className="text-base font-medium" style={{ color: COR.textoSecundario }}>ng/dL total</span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-3">
+        {grupos.map((g) => (
+          <div key={g.chave} className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: g.cor }} />
+            <span className="text-[11px]" style={{ color: COR.textoSecundario }}>{g.nome}: <strong style={{ color: COR.textoPrincipal }}>{formatarNumeroBR(pontos[indiceHoje]?.[`${g.chave}_real`] ?? 0)} ng/dL</strong></span>
+          </div>
+        ))}
+        <div className="flex items-center gap-1.5">
+          <span className="w-2.5 h-0.5 rounded-full" style={{ backgroundImage: `repeating-linear-gradient(90deg, ${COR.prevista} 0 3px, transparent 3px 6px)` }} />
+          <span className="text-[11px]" style={{ color: COR.textoSecundario }}>Prevista</span>
+        </div>
+      </div>
+
+      <div className="flex gap-1 mt-4 p-1 rounded-xl w-fit" style={{ backgroundColor: "#22252B" }}>
+        {[{ label: "4S", valor: 4 }, { label: "8S", valor: 8 }, { label: "12S", valor: 12 }, { label: "Tudo", valor: null }].map((opt) => (
+          <button key={opt.label} onClick={() => setPeriodo(opt.valor)} className="text-xs font-medium px-3 py-1.5 rounded-lg transition-colors" style={{ backgroundColor: periodo === opt.valor ? COR.card : "transparent", color: periodo === opt.valor ? COR.textoPrincipal : COR.textoSecundario, boxShadow: periodo === opt.valor ? "0 1px 2px rgba(0,0,0,0.06)" : "none" }}>
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="h-52 mt-3 -ml-2">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={dadosVisiveis} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+            <CartesianGrid vertical={false} stroke={COR.borda} />
+            <XAxis dataKey="label" tick={{ fontSize: 10, fill: COR.textoSecundario }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+            <YAxis tick={{ fontSize: 10, fill: COR.textoSecundario }} axisLine={false} tickLine={false} width={38} domain={[0, "dataMax + 100"]} label={{ value: "ng/dL", angle: -90, position: "insideLeft", fontSize: 9, fill: COR.textoSecundario }} />
+            <Tooltip contentStyle={{ borderRadius: 12, border: `1px solid ${COR.borda}`, fontSize: 12, backgroundColor: COR.card, color: COR.textoPrincipal }} formatter={(v) => [`${v} ng/dL`, "Nível estimado"]} />
+            <ReferenceLine x={pontos[indiceHoje]?.label} stroke={COR.textoSecundario} strokeDasharray="2 3" />
+            {grupos.map((g) => (
+              <Line key={`${g.chave}-prevista`} type="monotone" dataKey={`${g.chave}_prevista`} stroke={COR.prevista} strokeWidth={1.5} strokeDasharray="4 4" dot={false} isAnimationActive={false} />
+            ))}
+            {grupos.map((g) => (
+              <Line key={`${g.chave}-real`} type="monotone" dataKey={`${g.chave}_real`} stroke={g.cor} strokeWidth={2.5} dot={false} isAnimationActive={false} connectNulls={false} />
+            ))}
+            <Brush dataKey="label" height={18} stroke={COR.acentoReal} fill={COR.card} travellerWidth={8} tickFormatter={() => ""} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// TELA PRINCIPAL
+// ============================================================================
+function TelaMeuCiclo() {
+  const [carregado, setCarregado] = useState(false);
+  const [ciclos, setCiclos] = useState([]);
+  const [cicloAtivoId, setCicloAtivoId] = useState(null);
+  const [periodo, setPeriodo] = useState(8);
+  const [pesoCorporal, setPesoCorporal] = useState(80);
+  const [fabAberto, setFabAberto] = useState(false);
+  const [editandoNome, setEditandoNome] = useState(false);
+  const [nomeTemp, setNomeTemp] = useState("");
+  const [tela, setTela] = useState("ciclo");
+  const [abaAtiva, setAbaAtiva] = useState("ciclo"); // 'calculadora' | 'ciclo' | 'grafico'
+  const [modoCalculadora, setModoCalculadora] = useState("peptideos"); // 'peptideos' | 'hormonios'
+  const [modalAtraso, setModalAtraso] = useState(null);
+  const [modalDesfazer, setModalDesfazer] = useState(null);
+  const [itemEditando, setItemEditando] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [confirmandoReset, setConfirmandoReset] = useState(false);
+  const [mostrarArquivados, setMostrarArquivados] = useState(false);
+  const [erroStorage, setErroStorage] = useState(false);
+  const inputNomeRef = useRef(null);
+  const inputImportarRef = useRef(null);
+
+  // ---- Carrega os dados salvos ao abrir o app (uma única vez) ----
+  useEffect(() => {
+    try {
+      const bruto = localStorage.getItem(CHAVE_STORAGE);
+      if (bruto) {
+        const dados = JSON.parse(bruto);
+        const ciclosCarregados = desserializarCiclos(dados.ciclos || []);
+        setCiclos(ciclosCarregados);
+        setCicloAtivoId(dados.cicloAtivoId ?? ciclosCarregados[0]?.id ?? null);
+        if (dados.pesoCorporal) setPesoCorporal(dados.pesoCorporal);
+      } else {
+        const inicial = gerarCicloInicial();
+        setCiclos([inicial]);
+        setCicloAtivoId(inicial.id);
+      }
+    } catch {
+      // Primeira vez usando o app (ou dado salvo corrompido) — começa com o ciclo de exemplo
+      const inicial = gerarCicloInicial();
+      setCiclos([inicial]);
+      setCicloAtivoId(inicial.id);
+    } finally {
+      setCarregado(true);
+    }
+  }, []);
+
+  // ---- Salva automaticamente sempre que os ciclos/ciclo ativo/peso mudam ----
+  useEffect(() => {
+    if (!carregado) return; // evita sobrescrever o storage antes do carregamento inicial terminar
+    const salvar = () => {
+      try {
+        localStorage.setItem(CHAVE_STORAGE, JSON.stringify({ ciclos: serializarCiclos(ciclos), cicloAtivoId, pesoCorporal }));
+        setErroStorage(false);
+      } catch {
+        setErroStorage(true);
+      }
+    };
+    const timeout = setTimeout(salvar, 350); // pequeno atraso para agrupar mudanças rápidas em seguida
+    return () => clearTimeout(timeout);
+  }, [ciclos, cicloAtivoId, pesoCorporal, carregado]);
+
+  const handleReiniciarDados = () => {
+    try { localStorage.removeItem(CHAVE_STORAGE); } catch { /* nada salvo ainda, tudo bem */ }
+    const inicial = gerarCicloInicial();
+    setCiclos([inicial]);
+    setCicloAtivoId(inicial.id);
+    setPesoCorporal(80);
+    setConfirmandoReset(false);
+    setToast("Dados reiniciados.");
+  };
+
+  const handleExportarBackup = () => {
+    const payload = JSON.stringify({ ciclos: serializarCiclos(ciclos), cicloAtivoId, pesoCorporal, exportadoEm: new Date().toISOString() }, null, 2);
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `pepplot-backup-${paraInputDate(HOJE)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setToast("Backup exportado.");
+  };
+
+  const handleImportarBackup = (arquivo) => {
+    const leitor = new FileReader();
+    leitor.onload = (e) => {
+      try {
+        const dados = JSON.parse(e.target.result);
+        const ciclosImportados = desserializarCiclos(dados.ciclos || []);
+        if (ciclosImportados.length === 0) throw new Error("Arquivo vazio");
+        setCiclos(ciclosImportados);
+        setCicloAtivoId(dados.cicloAtivoId ?? ciclosImportados[0].id);
+        if (dados.pesoCorporal) setPesoCorporal(dados.pesoCorporal);
+        setToast("Backup importado com sucesso.");
+      } catch {
+        setToast("Não foi possível importar esse arquivo.");
+      }
+    };
+    leitor.readAsText(arquivo);
+  };
+
+  const cicloAtivo = ciclos.find((c) => c.id === cicloAtivoId) ?? null;
+
+  useEffect(() => { if (editandoNome && inputNomeRef.current) inputNomeRef.current.select(); }, [editandoNome]);
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 2400); return () => clearTimeout(t); }, [toast]);
+
+  const atualizarItensDoCicloAtivo = (novaFn) => setCiclos((atual) => atual.map((c) => (c.id === cicloAtivoId ? { ...c, itens: novaFn(c.itens) } : c)));
+
+  const criarCiclo = () => {
+    const novoId = `ciclo-${Date.now()}`;
+    setCiclos((atual) => [...atual, { id: novoId, nome: "Novo ciclo", itens: [], arquivado: false }]);
+    setCicloAtivoId(novoId);
+    setNomeTemp("Novo ciclo");
+    setEditandoNome(true);
+  };
+
+  const handleEncerrarCiclo = () => {
+    setCiclos((atual) => atual.map((c) => (c.id === cicloAtivoId ? { ...c, arquivado: true } : c)));
+    const proximoAtivo = ciclos.find((c) => c.id !== cicloAtivoId && !c.arquivado);
+    setCicloAtivoId(proximoAtivo?.id ?? null);
+    setToast("Ciclo encerrado e arquivado.");
+  };
+
+  const handleReativarCiclo = (id) => {
+    setCiclos((atual) => atual.map((c) => (c.id === id ? { ...c, arquivado: false } : c)));
+    setCicloAtivoId(id);
+    setToast("Ciclo reativado.");
+  };
+
+  const salvarNomeCiclo = () => {
+    const nomeFinal = nomeTemp.trim() || "Ciclo sem nome";
+    setCiclos((atual) => atual.map((c) => (c.id === cicloAtivoId ? { ...c, nome: nomeFinal } : c)));
+    setEditandoNome(false);
+  };
+
+  const handleMarcarNoHorario = (agendamentoId) => {
+    const item = cicloAtivo.itens.find((it) => it.agendamentos.some((a) => a.id === agendamentoId));
+    if (!item) return;
+    atualizarItensDoCicloAtivo((itens) => darCheckNoHorario(itens, item.id, agendamentoId));
+  };
+
+  const handleConfirmarAtraso = (dataRealEscolhida) => {
+    const item = cicloAtivo.itens.find((it) => it.agendamentos.some((a) => a.id === modalAtraso.id));
+    if (item) {
+      atualizarItensDoCicloAtivo((itens) => confirmarDoseAtrasada(itens, item.id, modalAtraso.id, dataRealEscolhida));
+      const desvio = Math.round(diferencaEmDias(modalAtraso.dataProgramada, dataRealEscolhida));
+      setToast(desvio === 0 ? "Dose confirmada no dia programado." : `Dose confirmada com ${desvio}d de atraso — próximas doses reajustadas.`);
+    }
+    setModalAtraso(null);
+  };
+
+  const handleConfirmarDesfazer = () => {
+    const item = cicloAtivo.itens.find((it) => it.agendamentos.some((a) => a.id === modalDesfazer.id));
+    if (item) { atualizarItensDoCicloAtivo((itens) => desfazerCheckin(itens, item.id, modalDesfazer.id)); setToast("Check-in desfeito."); }
+    setModalDesfazer(null);
+  };
+
+  const handleSalvarNovoComposto = (config) => {
+    const novoItem = criarItem({ id: `item-${Date.now()}`, ...config });
+    atualizarItensDoCicloAtivo((itens) => [...itens, novoItem]);
+    setTela("ciclo");
+    setToast(`${config.compostoNome} adicionado ao ${cicloAtivo.nome}.`);
+  };
+
+  const handleSalvarEdicaoComposto = (campos) => {
+    const doseOuFrequenciaMudou =
+      campos.dose !== undefined &&
+      (campos.dose !== itemEditando.dose || JSON.stringify(campos.frequencia) !== JSON.stringify(itemEditando.frequencia));
+    atualizarItensDoCicloAtivo((itens) => {
+      let atualizado = atualizarCamposItem(itens, itemEditando.id, campos);
+      if (doseOuFrequenciaMudou) {
+        atualizado = atualizarProtocoloItem(atualizado, itemEditando.id, { dose: campos.dose, frequencia: campos.frequencia });
+      }
+      return atualizado;
+    });
+    setItemEditando(null);
+    setToast(doseOuFrequenciaMudou ? "Composto atualizado — próximas doses recalculadas." : "Composto atualizado.");
+  };
+
+  const handleExcluirComposto = () => {
+    atualizarItensDoCicloAtivo((itens) => excluirItem(itens, itemEditando.id));
+    setToast("Composto excluído do ciclo.");
+    setItemEditando(null);
+  };
+
+  const itensHormonio = cicloAtivo?.itens.filter((it) => it.categoria === "hormonio") ?? [];
+  const itensPeptideo = cicloAtivo?.itens.filter((it) => it.categoria === "peptideo") ?? [];
+  const pontosPeptideo = useMemo(() => gerarDadosGrafico(itensPeptideo, HOJE), [itensPeptideo]);
+  const aderencia = useMemo(() => (cicloAtivo ? calcularAderenciaCiclo(cicloAtivo.itens, HOJE) : null), [cicloAtivo]);
+
+  const corPorItemId = useMemo(() => {
+    const mapa = {};
+    (cicloAtivo?.itens ?? []).forEach((it) => { mapa[it.id] = it.categoria === "hormonio" ? it.cor || PALETA_TIPOS_HORMONIO[it.tipoHormonio] || COR.acentoReal : it.cor || CORPADRAO_PEPTIDEO; });
+    return mapa;
+  }, [cicloAtivo]);
+
+  const agendaVisivel = useMemo(() => {
+    if (!cicloAtivo) return [];
+    return cicloAtivo.itens
+      .flatMap((item) => item.agendamentos.filter((a) => diferencaEmDias(a.dataProgramada, HOJE) <= 21 && diferencaEmDias(HOJE, a.dataProgramada) <= 10).map((a) => ({ ...a, posicao: item.agendamentos.findIndex((x) => x.id === a.id) + 1 })))
+      .sort((a, b) => a.dataProgramada - b.dataProgramada);
+  }, [cicloAtivo]);
+
+  const proximaAplicacao = agendaVisivel.find((a) => !a.realizada && a.dataProgramada >= HOJE);
+
+  if (!carregado) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center" style={{ backgroundColor: COR.bg, fontFamily: "'Inter', system-ui, sans-serif" }}>
+        <img src={LOGO_ICONE} alt="PepPlot" className="w-12 h-12 rounded-2xl mb-3 opacity-80" />
+        <p className="text-sm" style={{ color: COR.textoSecundario }}>Carregando seus dados…</p>
+      </div>
+    );
+  }
+
+  if (tela === "novoHormonio" && cicloAtivo) {
+    return (
+      <div className="min-h-screen w-full flex justify-center" style={{ backgroundColor: COR.bg, fontFamily: "'Inter', system-ui, sans-serif" }}>
+        <TelaConfigurarHormonio cicloNome={cicloAtivo.nome} pesoCorporal={pesoCorporal} onCancelar={() => setTela("ciclo")} onSalvar={handleSalvarNovoComposto} />
+      </div>
+    );
+  }
+  if (tela === "novoPeptideo" && cicloAtivo) {
+    return (
+      <div className="min-h-screen w-full flex justify-center" style={{ backgroundColor: COR.bg, fontFamily: "'Inter', system-ui, sans-serif" }}>
+        <TelaConfigurarPeptideo cicloNome={cicloAtivo.nome} onCancelar={() => setTela("ciclo")} onSalvar={handleSalvarNovoComposto} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen w-full flex justify-center" style={{ backgroundColor: COR.bg, fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <div className="w-full max-w-[430px] relative pb-24">
+        {/* Cabeçalho com logo e marca */}
+        <div className="px-5 pt-6 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <img src={LOGO_ICONE} alt="PepPlot" className="w-9 h-9 rounded-xl" />
+            <div>
+              <p className="text-[11px]" style={{ color: COR.textoSecundario }}>PepPlot</p>
+              <h1 className="text-lg font-semibold -mt-0.5" style={{ color: COR.textoPrincipal }}>
+                {abaAtiva === "calculadora" ? "Calculadora" : abaAtiva === "grafico" ? "Gráfico" : "Meu ciclo"}
+              </h1>
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-2.5">
+              <button onClick={handleExportarBackup} className="text-[11px] font-medium" style={{ color: COR.textoSecundario }}>Exportar</button>
+              <button onClick={() => inputImportarRef.current?.click()} className="text-[11px] font-medium" style={{ color: COR.textoSecundario }}>Importar</button>
+              <input ref={inputImportarRef} type="file" accept="application/json" className="hidden" onChange={(e) => e.target.files[0] && handleImportarBackup(e.target.files[0])} />
+            </div>
+            {!confirmandoReset ? (
+              <button onClick={() => setConfirmandoReset(true)} className="text-[11px] font-medium" style={{ color: COR.textoSecundario }}>
+                Reiniciar dados
+              </button>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <button onClick={() => setConfirmandoReset(false)} className="text-[11px] font-medium px-2 py-1 rounded-lg" style={{ backgroundColor: "#22252B", color: COR.textoPrincipal }}>Cancelar</button>
+                <button onClick={handleReiniciarDados} className="text-[11px] font-medium px-2 py-1 rounded-lg" style={{ backgroundColor: COR.perdido, color: "#fff" }}>Confirmar</button>
+              </div>
+            )}
+          </div>
+        </div>
+        {erroStorage && (
+          <p className="px-5 mt-1 text-[11px]" style={{ color: COR.atraso }}>Não foi possível salvar suas últimas alterações. Verifique sua conexão.</p>
+        )}
+
+        {/* ================= ABA: MEU CICLO (somente cronograma/calendário) ================= */}
+        {abaAtiva === "ciclo" && (
+          <div className="px-5 mt-4">
+            <div className="flex items-center gap-2 pb-1 overflow-x-auto no-scrollbar">
+              {ciclos.filter((c) => !c.arquivado).map((c) => (
+                <button key={c.id} onClick={() => { setCicloAtivoId(c.id); setEditandoNome(false); }} className="text-xs font-medium px-3.5 py-2 rounded-full whitespace-nowrap shrink-0 transition-colors" style={{ backgroundColor: c.id === cicloAtivoId ? COR.acentoReal : "#22252B", color: c.id === cicloAtivoId ? COR.bg : COR.textoSecundario, border: `1px solid ${c.id === cicloAtivoId ? COR.acentoReal : "transparent"}` }}>
+                  {c.nome}
+                </button>
+              ))}
+              <button onClick={criarCiclo} className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ border: `1.5px dashed ${COR.borda}`, color: COR.textoSecundario }} aria-label="Criar novo ciclo">
+                <Plus size={14} />
+              </button>
+            </div>
+
+            {ciclos.some((c) => c.arquivado) && (
+              <button onClick={() => setMostrarArquivados((v) => !v)} className="text-[11px] font-medium mt-1 mb-2" style={{ color: COR.textoSecundario }}>
+                {mostrarArquivados ? "Ocultar" : "Ver"} ciclos encerrados ({ciclos.filter((c) => c.arquivado).length})
+              </button>
+            )}
+            {mostrarArquivados && (
+              <div className="flex flex-col gap-1.5 mb-3">
+                {ciclos.filter((c) => c.arquivado).map((c) => (
+                  <div key={c.id} className="flex items-center justify-between px-3.5 py-2 rounded-xl" style={{ backgroundColor: "#1E2126" }}>
+                    <span className="text-xs" style={{ color: COR.textoSecundario }}>{c.nome}</span>
+                    <button onClick={() => handleReativarCiclo(c.id)} className="text-[11px] font-medium" style={{ color: COR.acentoReal }}>Reativar</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!cicloAtivo && (
+              <div className="flex flex-col items-center justify-center text-center px-4 py-16">
+                <p className="text-sm font-medium mb-4" style={{ color: COR.textoSecundario }}>Você ainda não tem nenhum ciclo.</p>
+                <button onClick={criarCiclo} className="text-sm font-medium px-5 py-3 rounded-xl" style={{ backgroundColor: COR.acentoReal, color: COR.bg }}>Criar ciclo</button>
+              </div>
+            )}
+
+            {cicloAtivo && (
+              <>
+                <div className="flex items-center justify-between pt-3 pb-3">
+                  {editandoNome ? (
+                    <input ref={inputNomeRef} value={nomeTemp} onChange={(e) => setNomeTemp(e.target.value)} onBlur={salvarNomeCiclo} onKeyDown={(e) => e.key === "Enter" && salvarNomeCiclo()} className="text-lg font-semibold bg-transparent border-b w-full" style={{ color: COR.textoPrincipal, borderColor: COR.acentoReal }} autoFocus />
+                  ) : (
+                    <div className="flex items-center gap-2 min-w-0">
+                      <h2 className="text-lg font-semibold truncate" style={{ color: COR.textoPrincipal }}>{cicloAtivo.nome}</h2>
+                      <button onClick={() => { setNomeTemp(cicloAtivo.nome); setEditandoNome(true); }} aria-label="Editar nome do ciclo" className="shrink-0">
+                        <Pencil size={13} style={{ color: COR.textoSecundario }} />
+                      </button>
+                    </div>
+                  )}
+                  {!editandoNome && (
+                    <div className="flex items-center gap-2 shrink-0">
+                      {aderencia != null && (
+                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full" style={{ color: aderencia >= 80 ? COR.acentoReal : COR.atraso, backgroundColor: aderencia >= 80 ? COR.acentoRealClaro : COR.atrasoClaro }}>
+                          Aderência: {aderencia}%
+                        </span>
+                      )}
+                      <button onClick={handleEncerrarCiclo} className="text-[11px] font-medium" style={{ color: COR.textoSecundario }}>Encerrar ciclo</button>
+                    </div>
+                  )}
+                </div>
+
+                {cicloAtivo.itens.length === 0 ? (
+                  <div className="rounded-2xl p-8 text-center" style={{ border: `1px dashed ${COR.borda}` }}>
+                    <p className="text-sm" style={{ color: COR.textoSecundario }}>Nenhum composto neste ciclo ainda. Use o botão <strong>+</strong> no canto inferior para adicionar o primeiro.</p>
+                  </div>
+                ) : (
+                  <>
+                    {proximaAplicacao && (
+                      <div className="flex items-center gap-2 mb-4 px-4 py-3 rounded-2xl" style={{ backgroundColor: `${corPorItemId[proximaAplicacao.itemId]}1A` }}>
+                        <Clock size={15} style={{ color: corPorItemId[proximaAplicacao.itemId] }} />
+                        <p className="text-xs font-medium" style={{ color: corPorItemId[proximaAplicacao.itemId] }}>
+                          Próxima aplicação: {formatarDataCurta(proximaAplicacao.dataProgramada)} · {proximaAplicacao.compostoNome} · {formatarNumeroBR(proximaAplicacao.doseExibicao)}{proximaAplicacao.unidadeExibicao}
+                        </p>
+                      </div>
+                    )}
+
+                    <p className="text-[11px] font-medium mb-3" style={{ color: COR.textoSecundario }}>Calendário de aplicações:</p>
+                    <div className="flex flex-col gap-2">
+                      {agendaVisivel.map((a) => (
+                        <CardAplicacao key={a.id} agendamento={a} posicao={a.posicao} hoje={HOJE} cor={corPorItemId[a.itemId]} onMarcarNoHorario={handleMarcarNoHorario} onAbrirModalAtraso={setModalAtraso} onPedirDesfazer={setModalDesfazer} />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ================= ABA: GRÁFICO (visão aplicada + compostos do ciclo) ================= */}
+        {abaAtiva === "grafico" && (
+          <div className="px-5 mt-4">
+            {!cicloAtivo ? (
+              <div className="flex flex-col items-center justify-center text-center px-4 py-16">
+                <p className="text-sm font-medium" style={{ color: COR.textoSecundario }}>Nenhum ciclo ativo. Crie ou selecione um na aba "Meu ciclo".</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between bg-[#1E2126] px-4 py-3 rounded-2xl mb-4" style={{ border: `1px solid ${COR.borda}` }}>
+                  <div className="flex items-center gap-2">
+                    <Scale size={16} style={{ color: COR.acentoReal }} />
+                    <span className="text-xs font-medium" style={{ color: COR.textoPrincipal }}>Massa corporal:</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <input type="number" min="30" max="250" value={pesoCorporal} onChange={(e) => setPesoCorporal(Number(e.target.value) || 70)} className="w-16 text-center text-sm font-semibold py-1 rounded-lg outline-none" style={{ backgroundColor: COR.card, border: `1px solid ${COR.borda}`, color: COR.acentoReal }} />
+                    <span className="text-xs" style={{ color: COR.textoSecundario }}>kg</span>
+                  </div>
+                </div>
+
+                {cicloAtivo.itens.length === 0 ? (
+                  <div className="rounded-2xl p-8 text-center" style={{ border: `1px dashed ${COR.borda}` }}>
+                    <p className="text-sm" style={{ color: COR.textoSecundario }}>Nenhum composto neste ciclo ainda.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex flex-col gap-2 mb-4">
+                      {cicloAtivo.itens.map((item) => {
+                        const custoInfo = calcularCustoItem(item);
+                        const estoqueInfo = calcularEstoqueItem(item);
+                        const cor = corPorItemId[item.id];
+                        return (
+                          <div key={item.id} className="flex items-center gap-3 py-2.5 px-3.5 rounded-2xl" style={{ backgroundColor: "#1E2126", borderLeft: `3px solid ${cor}` }}>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate" style={{ color: COR.textoPrincipal }}>{item.compostoNome}</p>
+                              <p className="text-[11px] flex items-center gap-1 flex-wrap" style={{ color: COR.textoSecundario }}>
+                                <Tag size={10} /> {item.marca || "Sem marca"}
+                                {custoInfo && <><span className="mx-0.5">·</span><Wallet size={10} /> R$ {formatarBRL(custoInfo.custoPorDose)}/dose</>}
+                              </p>
+                              {estoqueInfo && (
+                                <p className="text-[11px] mt-0.5" style={{ color: estoqueInfo.baixoEstoque ? COR.atraso : COR.textoSecundario }}>
+                                  {estoqueInfo.dosesRestantesEstoque > 0
+                                    ? `${estoqueInfo.dosesRestantesEstoque} dose(s) restantes · esgota em ${formatarDataCurta(estoqueInfo.dataEsgotamento)}`
+                                    : "Estoque esgotado"}
+                                </p>
+                              )}
+                            </div>
+                            <button onClick={() => setItemEditando(item)} className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: COR.card, border: `1px solid ${COR.borda}` }} aria-label="Editar composto">
+                              <Pencil size={13} style={{ color: cor }} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {itensHormonio.length > 0 && <div className="mb-4"><CardNivelHormonios itens={itensHormonio} periodo={periodo} setPeriodo={setPeriodo} hoje={HOJE} pesoCorporal={pesoCorporal} /></div>}
+                    {itensPeptideo.length > 0 && <div className="mb-4"><CardNivelPeptideos pontosGrafico={pontosPeptideo} periodo={periodo} setPeriodo={setPeriodo} hoje={HOJE} /></div>}
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ================= ABA: CALCULADORA ================= */}
+        {abaAtiva === "calculadora" && (
+          <div className="px-5 mt-4">
+            <div className="flex gap-1 p-1 rounded-xl mb-3" style={{ backgroundColor: "#1E2126" }}>
+              {[{ valor: "peptideos", label: "Peptídeos" }, { valor: "hormonios", label: "Hormônios" }].map((op) => (
+                <button key={op.valor} onClick={() => setModoCalculadora(op.valor)} className="flex-1 text-sm font-medium py-2 rounded-lg transition-colors" style={{ backgroundColor: modoCalculadora === op.valor ? COR.card : "transparent", color: modoCalculadora === op.valor ? COR.textoPrincipal : COR.textoSecundario }}>
+                  {op.label}
+                </button>
+              ))}
+            </div>
+            <div className="rounded-3xl p-4" style={{ backgroundColor: COR.card, border: `1px solid ${COR.borda}` }}>
+              {modoCalculadora === "peptideos" ? <CalculadoraDiluicaoPeptideos /> : <CalculadoraAspiracaoHormonios />}
+            </div>
+          </div>
+        )}
+
+        {/* FAB — só na aba Meu Ciclo, com um ciclo ativo */}
+        {abaAtiva === "ciclo" && cicloAtivo && (
+          <div className="fixed bottom-24 right-1/2 translate-x-[calc(215px-3.5rem)]">
+            {fabAberto && (
+              <div className="absolute bottom-16 right-0 w-56 rounded-2xl overflow-hidden" style={{ backgroundColor: COR.card, border: `1px solid ${COR.borda}`, boxShadow: "0 12px 24px rgba(0,0,0,0.12)" }}>
+                <button className="w-full flex items-center gap-3 px-4 py-3.5 text-left" onClick={() => { setFabAberto(false); setTela("novoHormonio"); }}>
+                  <Syringe size={16} style={{ color: COR.acentoReal }} />
+                  <span className="text-sm font-medium" style={{ color: COR.textoPrincipal }}>Adicionar hormônio</span>
+                </button>
+                <div className="h-px" style={{ backgroundColor: COR.borda }} />
+                <button className="w-full flex items-center gap-3 px-4 py-3.5 text-left" onClick={() => { setFabAberto(false); setTela("novoPeptideo"); }}>
+                  <FlaskConical size={16} style={{ color: COR.acentoPeptideo }} />
+                  <span className="text-sm font-medium" style={{ color: COR.textoPrincipal }}>Adicionar peptídeo</span>
+                </button>
+              </div>
+            )}
+            <button onClick={() => setFabAberto((v) => !v)} className="w-14 h-14 rounded-full flex items-center justify-center active:scale-95 transition-transform" style={{ backgroundColor: COR.acentoReal, boxShadow: `0 8px 24px ${COR.acentoReal}55` }}>
+              {fabAberto ? <X size={22} color={COR.bg} /> : <Plus size={22} color={COR.bg} />}
+            </button>
+          </div>
+        )}
+
+        {toast && <div className="fixed bottom-24 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-xl text-xs font-medium z-40" style={{ backgroundColor: "#22252B", color: COR.textoPrincipal, border: `1px solid ${COR.borda}`, maxWidth: 380 }}>{toast}</div>}
+
+        {modalAtraso && <ModalConfirmarData agendamento={modalAtraso} posicao={modalAtraso.posicao} hoje={HOJE} onConfirmar={handleConfirmarAtraso} onFechar={() => setModalAtraso(null)} />}
+        {modalDesfazer && <ModalDesfazerCheckin agendamento={modalDesfazer} posicao={modalDesfazer.posicao} onConfirmar={handleConfirmarDesfazer} onFechar={() => setModalDesfazer(null)} />}
+        {itemEditando && <ModalEditarComposto item={itemEditando} onSalvar={handleSalvarEdicaoComposto} onExcluir={handleExcluirComposto} onFechar={() => setItemEditando(null)} />}
+
+        {/* Barra de navegação inferior */}
+        <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] flex items-stretch" style={{ backgroundColor: COR.card, borderTop: `1px solid ${COR.borda}` }}>
+          {[
+            { key: "calculadora", label: "Calculadora", icone: FlaskConical },
+            { key: "ciclo", label: "Meu ciclo", icone: CalendarDays },
+            { key: "grafico", label: "Gráfico", icone: TrendingUp },
+          ].map((aba) => {
+            const Icone = aba.icone;
+            const ativa = abaAtiva === aba.key;
+            return (
+              <button key={aba.key} onClick={() => setAbaAtiva(aba.key)} className="flex-1 flex flex-col items-center gap-1 py-3">
+                <Icone size={20} style={{ color: ativa ? COR.acentoReal : COR.textoSecundario }} />
+                <span className="text-[10px] font-medium" style={{ color: ativa ? COR.acentoReal : COR.textoSecundario }}>{aba.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<TelaMeuCiclo />);
+  </script>
+</body>
+</html>
